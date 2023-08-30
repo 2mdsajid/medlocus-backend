@@ -1,6 +1,5 @@
 const express = require("express");
 const router = express.Router();
-const { info, user } = require("../schema/models.js");
 
 const {
   MECSYLLABUS,
