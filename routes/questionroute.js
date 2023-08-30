@@ -2,7 +2,11 @@ const express = require("express");
 const router = express.Router();
 const { info, user } = require("../schema/models.js");
 
-const { MECSYLLABUS, UNITWEIGHTAGE } = require("../public/syllabus.js");
+const {
+  MECSYLLABUS,
+  UNITWEIGHTAGE,
+  SUBJECTWEIGHTAGE,
+} = require("../public/syllabus.js");
 
 const Question = require("../schema/question"); // Import the Question model
 const Botany = require("../schema/botany");
@@ -13,6 +17,7 @@ const Mat = require("../schema/mat");
 
 // Function to generate random questions based on unit weightage
 const generateRandomQuestions = () => {
+  return;
   const randomQuestions = [];
 
   Object.entries(UNITWEIGHTAGE).forEach(([mergedunit, numQuestions]) => {
@@ -79,6 +84,23 @@ const addRandomQuestionsToDatabase = async () => {
 // Call the function to add random questions to the database
 // addRandomQuestionsToDatabase();
 
+let i = 0;
+const saveQuestionToSubjects = async () => {
+  return;
+  const questions = await Question.find();
+  for (const question of questions) {
+    i = i + 1;
+    const SubjectModel = getModelBasedOnSubject(question.subject);
+    const newSubjectEntry = new SubjectModel({
+      mergedunit: question.mergedunit,
+      questionid: question._id,
+    });
+    await newSubjectEntry.save();
+  }
+};
+
+// saveQuestionToSubjects()
+
 const getModelBasedOnSubject = (subject) => {
   let SubjectModel;
   switch (subject) {
@@ -105,7 +127,20 @@ const getModelBasedOnSubject = (subject) => {
       });
   }
 
-  return SubjectModel
+  return SubjectModel;
+};
+
+const isTopicPresent = (subjectName, topicToCheck) => {
+  const subject = MECSYLLABUS.subjects.find(
+    (subject) => subject.name === subjectName
+  );
+  if (subject) {
+    const unitsWithTopic = subject.units.filter((unit) =>
+      unit.topics.includes(topicToCheck)
+    );
+    return unitsWithTopic.length > 0;
+  }
+  return false;
 };
 
 router.post("/savequestion", async (req, res) => {
@@ -147,7 +182,7 @@ router.post("/savequestion", async (req, res) => {
       existingQuestion.ispast = ispast;
       existingQuestion.isverified.by = isreviewed.by;
       existingQuestion.isverified.state = true;
-      newsubject = subject
+      newsubject = subject;
       message = "Question Reviewed Successfully";
     } else {
       existingQuestion = new Question({
@@ -181,11 +216,14 @@ router.post("/savequestion", async (req, res) => {
       });
       await newSubjectEntry.save();
     }
-  
+
     if (previousmergedunit !== savedQuestion.mergedunit) {
-      const PreviousSubjectModel = getModelBasedOnSubject(previoussubject)
+      const PreviousSubjectModel = getModelBasedOnSubject(previoussubject);
       if (PreviousSubjectModel) {
-        await PreviousSubjectModel.deleteOne({ questionid: savedQuestion._id, mergedunit: previousmergedunit });
+        await PreviousSubjectModel.deleteOne({
+          questionid: savedQuestion._id,
+          mergedunit: previousmergedunit,
+        });
       }
     }
 
@@ -363,49 +401,134 @@ router.get("/getqnbyid", async (req, res) => {
   }
 });
 
-router.get("/q", async (req, res) => {
-  try {
-    const dat = new user({
-      fullname: "sajid",
-      email: "sajid@gmail.com",
-      password: "passss",
+router.get("/testquestions/:typeoftest", async (req, res) => {
+  const { model, num, sub, chap } = req.query;
+  const { typeoftest } = req.params;
+
+  if (typeoftest === "chapterwise") {
+    // for chapterwise test
+    if (!sub || !(sub in SUBJECTWEIGHTAGE)) {
+      return res.status(400).json({
+        message: "subject missing",
+        status: 300,
+      });
+    }
+
+    if (!chap || !isTopicPresent(sub, chap)) {
+      return res.status(400).json({
+        message: "chapter missing or not matched",
+        status: 300,
+      });
+    }
+    if (num > 50) {
+      return res.status(400).json({
+        message: "Number of question cant be more than 50",
+        status: 300,
+      });
+    }
+
+    const chapquestions = await Question.find({
+      subject: sub,
+      chapter: chap,
     });
 
-    await dat.save();
+    if (chapquestions.length < 0) {
+      return res.status(400).json({
+        message: "cant get chapter questions",
+        status: 300,
+      });
+    }
+
+    return res.status(400).json({
+      message: "Chapter questions found",
+      status: 300,
+      chapquestions,
+    });
+
+  } else if (typeoftest === "modeltest") {
+    const qnnum = parseInt(num)
+    if (![50,100,150,200].includes(qnnum)) {
+      return res.status(400).json({
+        message: "number of questions not matched or unusual",
+        status: 300,
+      });
+    }
+    const fraction = qnnum / 200;
+    const subjectKeys = Object.keys(SUBJECTWEIGHTAGE);
+    const allRandomQuestions = [];
+
+    for (const subject of subjectKeys) {
+      const SubjectModel = getModelBasedOnSubject(subject);
+      const numberOfQuestions = Math.ceil(SUBJECTWEIGHTAGE[subject] * fraction);
+      const totalQuestionsInModel = await SubjectModel.countDocuments();
+
+      const questionsToFetch = Math.min(
+        numberOfQuestions,
+        totalQuestionsInModel
+      );
+      const randomQuestions = await SubjectModel.aggregate([
+        { $sample: { size: questionsToFetch } },
+      ]);
+
+      const populatedQuestions = await SubjectModel.populate(randomQuestions, {
+        path: "questionid",
+        select: "question options answer explanation _id",
+      });
+
+      allRandomQuestions.push(...populatedQuestions);
+    }
+
+    if(allRandomQuestions.length > qnnum) {
+    allRandomQuestions.pop();
+    }
 
     return res.status(200).json({
-      message: "Question saved successfully",
+      message: "Questions fetched successfully",
       status: 200,
-      meaning: "ok",
-      question: dat,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: "Error saving question",
-      status: 500,
-      meaning: "internalerror",
-      error: error.message,
+      questions: allRandomQuestions.length,
     });
   }
+
+  return res.status(200).json({
+    message:"Type of test not found",
+    status: 404,
+  });
 });
 
-router.get("/getuser", async (req, res) => {
-  try {
-    const infos = await info.find();
-    return res.status(200).json({
-      message: "Question saved successfully",
-      status: 200,
-      meaning: "ok",
-      infos,
+router.get("/syllabustest", async (req, res) => {});
+
+router.get("/getsubjectqn", async (req, res) => {
+  const subjectKeys = Object.keys(SUBJECTWEIGHTAGE);
+  const allRandomQuestions = [];
+
+  for (const subject of subjectKeys) {
+    const SubjectModel = getModelBasedOnSubject(subject);
+    const numberOfQuestions = SUBJECTWEIGHTAGE[subject];
+    const totalQuestionsInModel = await SubjectModel.countDocuments();
+
+    if (totalQuestionsInModel === 0) {
+      console.log(`No questions available for ${subject}`);
+      continue;
+    }
+
+    const questionsToFetch = Math.min(numberOfQuestions, totalQuestionsInModel);
+    const randomQuestions = await SubjectModel.aggregate([
+      { $sample: { size: questionsToFetch } },
+    ]);
+
+    const populatedQuestions = await SubjectModel.populate(randomQuestions, {
+      path: "questionid",
+      select: "question options answer explanation _id",
     });
-  } catch (error) {
-    return res.status(500).json({
-      message: "Error saving question",
-      status: 500,
-      meaning: "internalerror",
-      error: error.message,
-    });
+
+    allRandomQuestions.push(...populatedQuestions);
   }
+
+  return res.status(200).json({
+    message: "Questions fetched successfully",
+    status: 200,
+    questions: allRandomQuestions,
+  });
 });
 
 module.exports = router;
