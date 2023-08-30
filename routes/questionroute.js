@@ -404,34 +404,36 @@ router.get("/getqnbyid", async (req, res) => {
 router.get("/testquestions/:typeoftest", async (req, res) => {
   const { model, num, sub, chap } = req.query;
   const { typeoftest } = req.params;
-
   if (typeoftest === "chapterwise") {
     // for chapterwise test
     if (!sub || !(sub in SUBJECTWEIGHTAGE)) {
       return res.status(400).json({
-        message: "subject missing",
-        status: 300,
+        message: "Invalid or missing subject",
+        status: 400,
       });
     }
-
+    
     if (!chap || !isTopicPresent(sub, chap)) {
       return res.status(400).json({
-        message: "chapter missing or not matched",
-        status: 300,
+        message: "Invalid or missing chapter or chapter not found for the subject",
+        status: 400,
       });
     }
+    
     if (num > 50) {
       return res.status(400).json({
-        message: "Number of question cant be more than 50",
-        status: 300,
+        message: "Number of questions cannot exceed 50",
+        status: 400,
       });
     }
 
-    const chapquestions = await Question.find({
-      subject: sub,
-      chapter: chap,
-    });
-
+    const chapquestions = await Question.find(
+      {
+          subject: sub,
+          chapter: chap,
+      },
+      "question options answer explanation _id"
+  );
     if (chapquestions.length < 0) {
       return res.status(400).json({
         message: "cant get chapter questions",
@@ -439,10 +441,10 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
       });
     }
 
-    return res.status(400).json({
+    return res.status(200).json({
       message: "Chapter questions found",
-      status: 300,
-      chapquestions,
+      status: 200,
+      questions:chapquestions,
     });
 
   } else if (typeoftest === "modeltest") {
@@ -475,7 +477,9 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
         select: "question options answer explanation _id",
       });
 
-      allRandomQuestions.push(...populatedQuestions);
+      const questionIds = populatedQuestions.map(item => item.questionid);
+  
+      allRandomQuestions.push(...questionIds)
     }
 
     if(allRandomQuestions.length > qnnum) {
@@ -485,7 +489,7 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
     return res.status(200).json({
       message: "Questions fetched successfully",
       status: 200,
-      questions: allRandomQuestions.length,
+      questions: allRandomQuestions,
     });
   }
 
@@ -521,7 +525,8 @@ router.get("/getsubjectqn", async (req, res) => {
       select: "question options answer explanation _id",
     });
 
-    allRandomQuestions.push(...populatedQuestions);
+    const questionIds = populatedQuestions.map(item => item.questionid);
+    allRandomQuestions.push(...questionIds)
   }
 
   return res.status(200).json({
