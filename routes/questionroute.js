@@ -13,6 +13,7 @@ const Zoology = require("../schema/zoology");
 const Physics = require("../schema/physics");
 const Chemistry = require("../schema/chemistry");
 const Mat = require("../schema/mat");
+const DailyTest = require("../schema/dailytest");
 
 // Function to generate random questions based on unit weightage
 const generateRandomQuestions = () => {
@@ -140,6 +141,15 @@ const isTopicPresent = (subjectName, topicToCheck) => {
     return unitsWithTopic.length > 0;
   }
   return false;
+};
+
+const createTodayDateId = () => {
+  const currentDate = new Date();
+  const year = currentDate.getFullYear();
+  const month = String(currentDate.getMonth() + 1).padStart(2, "0"); // Month is zero-based
+  const day = String(currentDate.getDate()).padStart(2, "0");
+  const dateid = `${year}-${month}-${day}`;
+  return dateid;
 };
 
 router.post("/savequestion", async (req, res) => {
@@ -411,14 +421,15 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
         status: 400,
       });
     }
-    
+
     if (!chap || !isTopicPresent(sub, chap)) {
       return res.status(400).json({
-        message: "Invalid or missing chapter or chapter not found for the subject",
+        message:
+          "Invalid or missing chapter or chapter not found for the subject",
         status: 400,
       });
     }
-    
+
     if (num > 50) {
       return res.status(400).json({
         message: "Number of questions cannot exceed 50",
@@ -428,27 +439,26 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
 
     const chapquestions = await Question.find(
       {
-          subject: sub,
-          chapter: chap,
+        subject: sub,
+        chapter: chap,
       },
       "question options answer explanation _id"
-  );
+    );
     if (chapquestions.length < 0) {
       return res.status(400).json({
         message: "cant get chapter questions",
-        status: 300,
+        status: 400,
       });
     }
 
     return res.status(200).json({
       message: "Chapter questions found",
       status: 200,
-      questions:chapquestions,
+      questions: chapquestions,
     });
-
   } else if (typeoftest === "modeltest") {
-    const qnnum = parseInt(num)
-    if (![50,100,150,200].includes(qnnum)) {
+    const qnnum = parseInt(num);
+    if (![50, 100, 150, 200].includes(qnnum)) {
       return res.status(400).json({
         message: "number of questions not matched or unusual",
         status: 300,
@@ -476,13 +486,13 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
         select: "question options answer explanation _id",
       });
 
-      const questionIds = populatedQuestions.map(item => item.questionid);
-  
-      allRandomQuestions.push(...questionIds)
+      const questionIds = populatedQuestions.map((item) => item.questionid);
+
+      allRandomQuestions.push(...questionIds);
     }
 
-    if(allRandomQuestions.length > qnnum) {
-    allRandomQuestions.pop();
+    if (allRandomQuestions.length > qnnum) {
+      allRandomQuestions.pop();
     }
 
     return res.status(200).json({
@@ -490,49 +500,91 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
       status: 200,
       questions: allRandomQuestions,
     });
+  } else if (typeoftest === "dailytest") {
+    const dateid = createTodayDateId();
+    const test = await DailyTest.findOne({
+      dateid: dateid,
+    }).populate({
+      path: "questions.question", 
+      model: Question, 
+      select: "question options answer explanation _id", 
+    });
+
+    if (!test) {
+      return res.status(404).json({
+        message: "Daily test not found",
+        status: 404,
+      });
+    }
+
+    return res.status(200).json({
+      message: "Daily test retrieved successfully",
+      status: 200,
+      test: test,
+    });
   }
 
-  return res.status(200).json({
-    message:"Type of test not found",
+  return res.status(404).json({
+    message: "Type of test not found",
     status: 404,
   });
 });
 
-router.get("/syllabustest", async (req, res) => {});
+router.get("/createdailytest", async (req, res) => {
+  try {
+    let finalquestions = [];
+    const dateid = createTodayDateId();
+    for (const subject in UNITWEIGHTAGE) {
+      if (UNITWEIGHTAGE.hasOwnProperty(subject)) {
+        const subjectModel = getModelBasedOnSubject(subject);
+        const unitWeightage = UNITWEIGHTAGE[subject];
 
-router.get("/getsubjectqn", async (req, res) => {
-  const subjectKeys = Object.keys(SUBJECTWEIGHTAGE);
-  const allRandomQuestions = [];
+        for (const mergedunit in unitWeightage) {
+          if (unitWeightage.hasOwnProperty(mergedunit)) {
+            const numberOfQuestions = unitWeightage[mergedunit];
 
-  for (const subject of subjectKeys) {
-    const SubjectModel = getModelBasedOnSubject(subject);
-    const numberOfQuestions = SUBJECTWEIGHTAGE[subject];
-    const totalQuestionsInModel = await SubjectModel.countDocuments();
-
-    if (totalQuestionsInModel === 0) {
-      console.log(`No questions available for ${subject}`);
-      continue;
+            try {
+              const randomQuestions = await subjectModel.aggregate([
+                { $match: { mergedunit: mergedunit } },
+                { $sample: { size: numberOfQuestions } },
+              ]);
+              finalquestions.push(...randomQuestions);
+            } catch (error) {
+              console.error(
+                `Error fetching questions for ${subject} - ${mergedunit}: ${error}`
+              );
+            }
+          }
+        }
+      }
     }
 
-    const questionsToFetch = Math.min(numberOfQuestions, totalQuestionsInModel);
-    const randomQuestions = await SubjectModel.aggregate([
-      { $sample: { size: questionsToFetch } },
-    ]);
-
-    const populatedQuestions = await SubjectModel.populate(randomQuestions, {
-      path: "questionid",
-      select: "question options answer explanation _id",
+    const questionsArray = finalquestions.map((questionid) => {
+      return {
+        question: questionid.questionid,
+      };
+    });
+    
+    const dailytest = new DailyTest({
+      dateid: dateid,
+      questions: questionsArray, 
     });
 
-    const questionIds = populatedQuestions.map(item => item.questionid);
-    allRandomQuestions.push(...questionIds)
-  }
+    const savedtest = await dailytest.save();
 
-  return res.status(200).json({
-    message: "Questions fetched successfully",
-    status: 200,
-    questions: allRandomQuestions,
-  });
+    return res.status(200).json({
+      message: "Daily test created successfully",
+      status: 200,
+      savedtest: savedtest.questions.length,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error saving question",
+      status: 500,
+      meaning: "internalerror",
+      error: error.message,
+    });
+  }
 });
 
 module.exports = router;
