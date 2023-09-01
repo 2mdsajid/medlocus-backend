@@ -442,7 +442,7 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
         subject: sub,
         chapter: chap,
       },
-      "question options answer explanation _id"
+      "question options answer explanation subject chapter _id"
     );
     if (chapquestions.length < 0) {
       return res.status(400).json({
@@ -483,11 +483,10 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
 
       const populatedQuestions = await SubjectModel.populate(randomQuestions, {
         path: "questionid",
-        select: "question options answer explanation _id",
+        select: "question options answer explanation subject chapter _id",
       });
 
       const questionIds = populatedQuestions.map((item) => item.questionid);
-
       allRandomQuestions.push(...questionIds);
     }
 
@@ -507,9 +506,11 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
     }).populate({
       path: "questions.question", 
       model: Question, 
-      select: "question options answer explanation _id", 
+      select: "question options answer explanation subject chapter _id", 
     });
-
+    const qns = test.questions.map((question) => {
+      return question.question
+    })
     if (!test) {
       return res.status(404).json({
         message: "Daily test not found",
@@ -520,7 +521,7 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
     return res.status(200).json({
       message: "Daily test retrieved successfully",
       status: 200,
-      test: test,
+      questions: qns,
     });
   }
 
