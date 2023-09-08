@@ -49,7 +49,7 @@ const questionSchema = new mongoose.Schema({
   isadded: {
     state: {
       type: Boolean,
-      default: true,
+      default: false,
     },
     by: {
       type: String,
@@ -68,7 +68,7 @@ const questionSchema = new mongoose.Schema({
     by: {
       type: String,
     },
-    msg: {
+    message: {
       type: String,
     },
     date: {

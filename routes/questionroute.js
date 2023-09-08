@@ -1,12 +1,13 @@
 const express = require("express");
 const router = express.Router();
+const jwt = require("jsonwebtoken");
 
 const {
   MECSYLLABUS,
   UNITWEIGHTAGE,
   SUBJECTWEIGHTAGE,
+  UPDATED_SYLLABUS,
 } = require("../public/syllabus.js");
-
 const Question = require("../schema/question"); // Import the Question model
 const Botany = require("../schema/botany");
 const Zoology = require("../schema/zoology");
@@ -15,91 +16,114 @@ const Chemistry = require("../schema/chemistry");
 const Mat = require("../schema/mat");
 const DailyTest = require("../schema/dailytest");
 
+const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
+
 // Function to generate random questions based on unit weightage
 const generateRandomQuestions = () => {
-  return;
   const randomQuestions = [];
 
-  Object.entries(UNITWEIGHTAGE).forEach(([mergedunit, numQuestions]) => {
-    const subjectWithUnit = MECSYLLABUS.subjects.find((subject) =>
-      subject.units.some((unit) => unit.mergedunit === mergedunit)
+  Object.entries(UNITWEIGHTAGE).forEach(([subjectName, unitWeightage]) => {
+    // Find the subject with the same name as the current subjectName
+    const subjectWithUnit = UPDATED_SYLLABUS.subjects.find(
+      (subject) => subject.name === subjectName
     );
 
     if (!subjectWithUnit) return;
 
-    const unitInfo = subjectWithUnit.units.find(
-      (unit) => unit.mergedunit === mergedunit
-    );
-
-    for (let i = 0; i < numQuestions; i++) {
-      const randomTopicIndex = Math.floor(
-        Math.random() * unitInfo.topics.length
+    // Iterate through the unitWeightage for the current subject
+    Object.entries(unitWeightage).forEach(([mergedunit, numQuestions]) => {
+      const unitInfo = subjectWithUnit.units.find(
+        (unit) => unit.mergedunit === mergedunit
       );
-      const randomTopic = unitInfo.topics[randomTopicIndex];
-      const randomAnswerOption = ["a", "b", "c", "d"][
-        Math.floor(Math.random() * 4)
-      ];
-      const randomDifficulty = ["e", "m", "h", "p"][
-        Math.floor(Math.random() * 4)
-      ];
 
-      const newQuestion = {
-        question: `Question about ${randomTopic}`,
-        options: {
-          a: "Option A",
-          b: "Option B",
-          c: "Option C",
-          d: "Option D",
-        },
-        answer: randomAnswerOption, // Set the correct answer
-        explanation: `explanation about the question from chapter ${randomTopic} of subject ${subjectWithUnit.name}`,
-        subject: subjectWithUnit.name, // Set the subject from the found subject
-        chapter: randomTopic,
-        mergedunit,
-        difficulty: randomDifficulty, // Set the difficulty
-        isadded: {
-          state: true,
-          by: "51ae7f08-9e06-41b7-a00c-5c4567a01a50",
-        },
-      };
-      randomQuestions.push(newQuestion);
-    }
+      if (!unitInfo) return;
+
+      for (let i = 0; i < numQuestions; i++) {
+        const randomTopicIndex = Math.floor(
+          Math.random() * unitInfo.topics.length
+        );
+        const randomTopic = unitInfo.topics[randomTopicIndex];
+        const randomAnswerOption = ["a", "b", "c", "d"][
+          Math.floor(Math.random() * 4)
+        ];
+        const randomDifficulty = ["e", "m", "h", "p"][
+          Math.floor(Math.random() * 4)
+        ];
+
+        const newQuestion = {
+          question: `Question about ${randomTopic}`,
+          options: {
+            a: "Option A",
+            b: "Option B",
+            c: "Option C",
+            d: "Option D",
+          },
+          answer: randomAnswerOption,
+          explanation: `Explanation about the question from chapter ${randomTopic} of subject ${subjectName}`,
+          subject: subjectName,
+          chapter: randomTopic,
+          mergedunit,
+          difficulty: randomDifficulty,
+          isadded: {
+            state: false,
+            by: "51ae7f08-9e06-41b7-a00c-5c4567a01a50",
+          },
+        };
+
+        randomQuestions.push(newQuestion);
+      }
+    });
   });
 
   return randomQuestions;
 };
 
-// Simulate adding random questions to the database
-const addRandomQuestionsToDatabase = async () => {
-  const randomQuestions = generateRandomQuestions();
-
+const organizeQuestionsBySubject = async () => {
   try {
+    const randomQuestions = generateRandomQuestions();
+
+    // Step 1: Insert all questions into the Question model
     await Question.insertMany(randomQuestions);
-    console.log("Random questions added successfully.");
-  } catch (error) {
-    console.error("Error adding random questions:", error);
-  }
-};
+    const allQuestions = await Question.find();
+    // Create an object to store questions grouped by subject
+    const questionsBySubject = {};
 
-// Call the function to add random questions to the database
-// addRandomQuestionsToDatabase();
+    // Group questions by subject
+    allQuestions.forEach((question) => {
+      const subject = question.subject;
 
-let i = 0;
-const saveQuestionToSubjects = async () => {
-  return;
-  const questions = await Question.find();
-  for (const question of questions) {
-    i = i + 1;
-    const SubjectModel = getModelBasedOnSubject(question.subject);
-    const newSubjectEntry = new SubjectModel({
-      mergedunit: question.mergedunit,
-      questionid: question._id,
+      if (!questionsBySubject[subject]) {
+        questionsBySubject[subject] = [];
+      }
+
+      questionsBySubject[subject].push({
+        mergedunit: question.mergedunit,
+        chapter: question.chapter,
+        questionid: question._id,
+      });
     });
-    await newSubjectEntry.save();
+
+    // Iterate through the subject models and insert the grouped questions
+    const SubjectModels = [...new Set(allQuestions.map((q) => q.subject))];
+
+    for (const model of SubjectModels) {
+      const SubjectModel = getModelBasedOnSubject(model);
+      const subjectQuestions = questionsBySubject[model];
+
+      if (subjectQuestions && subjectQuestions.length > 0) {
+        await SubjectModel.insertMany(subjectQuestions);
+        console.log(`Questions for ${model} inserted successfully.`);
+      }
+    }
+
+    console.log("Questions organized and inserted into subject collections.");
+  } catch (error) {
+    console.error("Error organizing and inserting questions:", error);
   }
 };
 
-// saveQuestionToSubjects()
+// Call the function to organize and insert questions
+// organizeQuestionsBySubject();
 
 const getModelBasedOnSubject = (subject) => {
   let SubjectModel;
@@ -121,10 +145,7 @@ const getModelBasedOnSubject = (subject) => {
       break;
     default:
       // Handle invalid subject
-      return res.status(400).json({
-        message: "Invalid subject",
-        status: 400,
-      });
+      return "zoology";
   }
 
   return SubjectModel;
@@ -152,10 +173,109 @@ const createTodayDateId = () => {
   return dateid;
 };
 
-router.post("/savequestion", async (req, res) => {
+router.post("/reviewquestion",VerifyAdmin, async (req, res) => {
+  try {
+    const reviewtype = req.query.reviewtype;
+    const _id = req.body.questionElement._id;
+    console.log("🚀 ~ file: questionroute.js:180 ~ router.post ~ _id:", _id)
+    const questionElement = req.body.questionElement;
+    console.log("🚀 ~ file: questionroute.js:182 ~ router.post ~ questionElement:", questionElement)
+
+    const existingQuestion = await Question.findById(_id);
+    if (!existingQuestion) {
+      return res.status(404).json({
+        message: "Question not found",
+      });
+    }
+
+    // Check if subject or mergedunit has changed
+    const subjectChanged = existingQuestion.subject !== questionElement.subject;
+    console.log("🚀 ~ file: questionroute.js:193 ~ router.post ~ subjectChanged:", subjectChanged)
+    const mergedUnitChanged =
+      existingQuestion.mergedunit !== questionElement.mergedunit;
+
+    // Update the existing question with new values
+    existingQuestion.question = questionElement.question;
+    existingQuestion.options = questionElement.options;
+    existingQuestion.answer = questionElement.answer;
+    existingQuestion.explanation = questionElement.explanation;
+    existingQuestion.subject = questionElement.subject;
+    existingQuestion.chapter = questionElement.chapter;
+    existingQuestion.mergedunit = questionElement.mergedunit;
+    existingQuestion.ispast = questionElement.ispast;
+    existingQuestion.difficulty = questionElement.difficulty;
+    existingQuestion.isverified = questionElement.isverified;
+    existingQuestion.isadded.state = true;
+
+    // Save the updated question
+    await existingQuestion.save();
+    
+    const SubjectModel = getModelBasedOnSubject(questionElement.subject);
+    const questioninmodelnew = await SubjectModel.findOne({
+      questionid: existingQuestion._id,
+      chapter: existingQuestion.chapter,
+      mergedunit: existingQuestion.mergedunit,
+    });
+    
+    if (!questioninmodelnew) {
+      const newSubjectEntry = new SubjectModel({
+        questionid: existingQuestion._id,
+        chapter: existingQuestion.chapter,
+        mergedunit: existingQuestion.mergedunit,
+      });
+      
+      // Save the new subject entry
+      await newSubjectEntry.save();
+    }
+    
+    // Check if subject or mergedunit has changed and update models accordingly
+    if (subjectChanged || mergedUnitChanged) {
+      const OldSubjectModel = getModelBasedOnSubject(existingQuestion.subject);
+      
+      // Remove the question from the old subject model
+      await OldSubjectModel.deleteOne({
+        questionid: existingQuestion._id,
+        chapter: existingQuestion.chapter,
+        mergedunit: existingQuestion.mergedunit,
+      });
+      
+      // Add the question to the new subject model
+      const NewSubjectModel = getModelBasedOnSubject(questionElement.subject);
+      const newSubjectEntry = new NewSubjectModel({
+        questionid: existingQuestion._id,
+        chapter: existingQuestion.chapter,
+        mergedunit: existingQuestion.mergedunit,
+      });
+      
+      await newSubjectEntry.save();
+    }
+    
+    console.log("🚀 ~ file: questionroute.js:209 ~ router.post ~ existingQuestion:", existingQuestion)
+    const elem = {
+      _id: existingQuestion.id,
+      userid:
+      reviewtype === "reported"
+      ? existingQuestion.isreported.by
+          : existingQuestion.isadded.by,
+      type: reviewtype,
+    };
+
+    console.log("🚀 ~ file: questionroute.js:209 ~ router.post ~ elem:", elem);
+    return res.status(200).json({
+      message: "Question updated successfully",
+      elem,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error updating question",
+      error: error.message,
+    });
+  }
+});
+
+router.post("/savequestion",VerifyUser, async (req, res) => {
   try {
     const {
-      _id,
       question,
       options,
       answer,
@@ -166,93 +286,54 @@ router.post("/savequestion", async (req, res) => {
       ispast,
       difficulty,
       isadded,
-      isreviewed,
     } = req.body.questionElement;
+    console.log("🚀 ~ file: questionroute.js:287 ~ router.post ~ req.body.questionElement:", req.body.questionElement)
 
-    let existingQuestion;
-    let message;
-    let previoussubject;
-    let newsubject;
-    let previousmergedunit;
-
-    if (_id) {
-      existingQuestion = await Question.findOne({ _id });
-      previoussubject = existingQuestion.subject;
-      previousmergedunit = existingQuestion.mergedunit;
-
-      existingQuestion.question = question;
-      existingQuestion.options = options;
-      existingQuestion.answer = answer;
-      existingQuestion.explanation = explanation;
-      existingQuestion.subject = subject;
-      existingQuestion.chapter = chapter;
-      existingQuestion.difficulty = difficulty;
-      existingQuestion.mergedunit = mergedunit;
-      existingQuestion.ispast = ispast;
-      existingQuestion.isverified.by = isreviewed.by;
-      existingQuestion.isverified.state = true;
-      newsubject = subject;
-      message = "Question Reviewed Successfully";
-    } else {
-      existingQuestion = new Question({
-        question,
-        options,
-        answer,
-        explanation,
-        subject,
-        chapter,
-        mergedunit,
-        ispast,
-        difficulty,
-        isadded,
-      });
-      newsubject = subject;
-      message = "Question Added Successfully";
-    }
+    const existingQuestion = new Question({
+      question,
+      options,
+      answer,
+      explanation,
+      subject,
+      chapter,
+      mergedunit,
+      ispast,
+      difficulty,
+      isadded,
+    });
 
     const savedQuestion = await existingQuestion.save();
+    console.log(
+      "🚀 ~ file: questionroute.js:299 ~ router.post ~ savedQuestion:",
+      savedQuestion
+    );
 
-    const SubjectModel = getModelBasedOnSubject(newsubject);
+    const SubjectModel = getModelBasedOnSubject(subject);
     const questioninmodelnew = await SubjectModel.findOne({
       questionid: savedQuestion._id,
+      chapter: savedQuestion.chapter,
       mergedunit: savedQuestion.mergedunit,
     });
 
     if (!questioninmodelnew) {
       const newSubjectEntry = new SubjectModel({
-        mergedunit: savedQuestion.mergedunit,
         questionid: savedQuestion._id,
+        chapter: savedQuestion.chapter,
+        mergedunit: savedQuestion.mergedunit,
       });
       await newSubjectEntry.save();
     }
 
-    if (previousmergedunit !== savedQuestion.mergedunit) {
-      const PreviousSubjectModel = getModelBasedOnSubject(previoussubject);
-      if (PreviousSubjectModel) {
-        await PreviousSubjectModel.deleteOne({
-          questionid: savedQuestion._id,
-          mergedunit: previousmergedunit,
-        });
-      }
-    }
-
     return res.status(200).json({
-      message,
-      status: 200,
-      meaning: "ok",
+      message: "question added successfully",
       elem: {
-        _is: savedQuestion._id,
-        isaddedby: savedQuestion.isadded.by,
-        isverified: savedQuestion.isverified.by,
-        isreportedby: savedQuestion.isreported.by,
+        questionid: savedQuestion._id,
+        userid: savedQuestion.isadded.by,
       },
     });
   } catch (error) {
     return res.status(500).json({
-      message: "Error saving question",
-      status: 500,
-      meaning: "internalerror",
-      error: error.message,
+      message: error.message,
     });
   }
 });
@@ -275,12 +356,17 @@ router.get("/getreviewquestions", async (req, res) => {
       questions = await Question.aggregate([
         { $match: { "isreported.state": true } },
         { $sample: { size: Number(num) } },
-      ]).exec(); // Convert the aggregation result to a Promise using .exec()
+      ]).exec();
+    } else if (type === "added") {
+      questions = await Question.aggregate([
+        { $match: { "isadded.state": false } },
+        { $sample: { size: Number(num) } },
+      ]).exec();
     } else {
       questions = await Question.aggregate([
-        { $match: { "isverified.state": false } },
+        { $match: { "isadded.state": false, "isverified.state": false } },
         { $sample: { size: Number(num) } },
-      ]).exec(); // Convert the aggregation result to a Promise using .exec()
+      ]).exec();
     }
 
     const formattedQuestions = questions.map((question) => ({
@@ -299,16 +385,11 @@ router.get("/getreviewquestions", async (req, res) => {
 
     return res.status(200).json({
       message: "Review questions fetched successfully",
-      status: 200,
-      meaning: "ok",
       questions: formattedQuestions,
     });
   } catch (error) {
     return res.status(500).json({
-      message: "Error fetching review questions",
-      status: 500,
-      meaning: "internalerror",
-      error: error.message,
+      message: error.message,
     });
   }
 });
@@ -360,27 +441,21 @@ router.post("/reportquestion", async (req, res) => {
   }
 });
 
-router.get("/getqnbyid", async (req, res) => {
+router.get("/getqnbyid", VerifyUser, async (req, res) => {
   const id = req.query.i;
+  const user = req.user;
   if (!id) {
     return res.status(400).json({
       message: "Missing parameter: question ID",
-      status: 400,
-      meaning: "badrequest",
     });
   }
-
   try {
     const question = await Question.findById(id);
-
     if (!question) {
       return res.status(404).json({
         message: "Question not found",
-        status: 404,
-        meaning: "notfound",
       });
     }
-
     const formattedQuestion = {
       _id: question._id,
       question: question.question,
@@ -393,19 +468,13 @@ router.get("/getqnbyid", async (req, res) => {
       ispast: question.ispast,
       difficulty: question.difficulty,
     };
-
     return res.status(200).json({
       message: "Question fetched successfully",
-      status: 200,
-      meaning: "ok",
       question: formattedQuestion,
     });
   } catch (error) {
     return res.status(500).json({
-      message: "Error fetching question",
-      status: 500,
-      meaning: "internalerror",
-      error: error.message,
+      message: error.message,
     });
   }
 });
@@ -504,13 +573,13 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
     const test = await DailyTest.findOne({
       dateid: dateid,
     }).populate({
-      path: "questions.question", 
-      model: Question, 
-      select: "question options answer explanation subject chapter _id", 
+      path: "questions.question",
+      model: Question,
+      select: "question options answer explanation subject chapter _id",
     });
     const qns = test.questions.map((question) => {
-      return question.question
-    })
+      return question.question;
+    });
     if (!test) {
       return res.status(404).json({
         message: "Daily test not found",
@@ -565,10 +634,10 @@ router.get("/createdailytest", async (req, res) => {
         question: questionid.questionid,
       };
     });
-    
+
     const dailytest = new DailyTest({
       dateid: dateid,
-      questions: questionsArray, 
+      questions: questionsArray,
     });
 
     const savedtest = await dailytest.save();

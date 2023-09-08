@@ -5,6 +5,10 @@ const questionSchema = new mongoose.Schema({
       type: String,
       required: true,
     },
+    chapter: {
+      type: String,
+      required: true,
+    },
     questionid: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Question",

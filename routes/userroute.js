@@ -12,6 +12,23 @@ const transporter = nodemailer.createTransport({
 });
 
 const DailyTest = require("../schema/dailytest");
+const Admin = require("../schema/admin");
+
+const createAdmin = async () => {
+  const createdadmin = new Admin({
+    name: "sajid",
+    email: "mdsajid@gmail.com",
+    key: "asecretkey",
+  });
+
+  await createdadmin.save();
+  console.log(
+    "🚀 ~ file: userroute.js:29 ~ createAdmin ~ createdadmin:",
+    createdadmin
+  );
+};
+
+// createAdmin()
 
 const createTodayDateId = () => {
   const currentDate = new Date();
@@ -95,9 +112,9 @@ router.get("/addusertotest", async (req, res) => {
 
 router.post("/addusertotest", async (req, res) => {
   const testid = createTodayDateId();
-  const {userid,score} = req.body
-  console.log("🚀 ~ file: userroute.js:99 ~ router.post ~ req.body:", req.body)
-  if(!userid) {
+  const { userid, score } = req.body;
+  console.log("🚀 ~ file: userroute.js:99 ~ router.post ~ req.body:", req.body);
+  if (!userid) {
     return res.status(400).json({
       message: "no userid or nam eprovided",
       status: 400,
@@ -116,8 +133,8 @@ router.post("/addusertotest", async (req, res) => {
 
   test.usersattended.push({
     userid,
-    totalscore:score
-  })
+    totalscore: score,
+  });
 
   const savedest = await test.save();
 
@@ -126,6 +143,5 @@ router.post("/addusertotest", async (req, res) => {
     status: 200,
     savedest,
   });
-
 });
 module.exports = router;
