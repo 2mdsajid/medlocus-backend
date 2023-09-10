@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 
 const {
   MECSYLLABUS,
@@ -173,14 +174,11 @@ const createTodayDateId = () => {
   return dateid;
 };
 
-router.post("/reviewquestion",VerifyAdmin, async (req, res) => {
+router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
   try {
     const reviewtype = req.query.reviewtype;
     const _id = req.body.questionElement._id;
-    console.log("🚀 ~ file: questionroute.js:180 ~ router.post ~ _id:", _id)
     const questionElement = req.body.questionElement;
-    console.log("🚀 ~ file: questionroute.js:182 ~ router.post ~ questionElement:", questionElement)
-
     const existingQuestion = await Question.findById(_id);
     if (!existingQuestion) {
       return res.status(404).json({
@@ -189,10 +187,22 @@ router.post("/reviewquestion",VerifyAdmin, async (req, res) => {
     }
 
     // Check if subject or mergedunit has changed
+    let oldsub = questionElement.subject,
+      oldchapter = questionElement.chapter,
+      oldmergedunit = questionElement.mergedunit;
     const subjectChanged = existingQuestion.subject !== questionElement.subject;
-    console.log("🚀 ~ file: questionroute.js:193 ~ router.post ~ subjectChanged:", subjectChanged)
+    if (subjectChanged) {
+      oldsub = existingQuestion.subject;
+    }
+    const chapterChanged = existingQuestion.chapter !== questionElement.chapter;
+    if (chapterChanged) {
+      oldchapter = existingQuestion.chapter;
+    }
     const mergedUnitChanged =
       existingQuestion.mergedunit !== questionElement.mergedunit;
+    if (mergedUnitChanged) {
+      oldmergedunit = existingQuestion.mergedunit;
+    }
 
     // Update the existing question with new values
     existingQuestion.question = questionElement.question;
@@ -207,73 +217,57 @@ router.post("/reviewquestion",VerifyAdmin, async (req, res) => {
     existingQuestion.isverified = questionElement.isverified;
     existingQuestion.isadded.state = true;
 
-    // Save the updated question
     await existingQuestion.save();
-    
-    const SubjectModel = getModelBasedOnSubject(questionElement.subject);
-    const questioninmodelnew = await SubjectModel.findOne({
-      questionid: existingQuestion._id,
+
+    if (subjectChanged || chapterChanged || mergedUnitChanged) {
+      const OldSubjectModel = getModelBasedOnSubject(oldsub);
+      const oldmodelqn = await OldSubjectModel.findOne({
+        questionid: new mongoose.Types.ObjectId(existingQuestion._id), // Assuming existingQuestion._id is already an ObjectId
+        chapter: oldchapter,
+        mergedunit: oldmergedunit,
+      });
+      await OldSubjectModel.deleteOne({
+        questionid: new mongoose.Types.ObjectId(existingQuestion._id),
+        chapter: oldchapter,
+        mergedunit: oldmergedunit,
+      });
+    }
+
+    const NewSubjectModel = getModelBasedOnSubject(questionElement.subject);
+    const questionInModelNew = await NewSubjectModel.findOne({
+      questionid: new mongoose.Types.ObjectId(existingQuestion._id), // Assuming existingQuestion._id is already an ObjectId
       chapter: existingQuestion.chapter,
       mergedunit: existingQuestion.mergedunit,
     });
-    
-    if (!questioninmodelnew) {
-      const newSubjectEntry = new SubjectModel({
-        questionid: existingQuestion._id,
-        chapter: existingQuestion.chapter,
-        mergedunit: existingQuestion.mergedunit,
-      });
-      
-      // Save the new subject entry
-      await newSubjectEntry.save();
-    }
-    
-    // Check if subject or mergedunit has changed and update models accordingly
-    if (subjectChanged || mergedUnitChanged) {
-      const OldSubjectModel = getModelBasedOnSubject(existingQuestion.subject);
-      
-      // Remove the question from the old subject model
-      await OldSubjectModel.deleteOne({
-        questionid: existingQuestion._id,
-        chapter: existingQuestion.chapter,
-        mergedunit: existingQuestion.mergedunit,
-      });
-      
-      // Add the question to the new subject model
-      const NewSubjectModel = getModelBasedOnSubject(questionElement.subject);
+    if (!questionInModelNew) {
       const newSubjectEntry = new NewSubjectModel({
         questionid: existingQuestion._id,
-        chapter: existingQuestion.chapter,
+        chapter: questionElement.chapter, // Update to the new chapter
         mergedunit: existingQuestion.mergedunit,
       });
-      
       await newSubjectEntry.save();
     }
-    
-    console.log("🚀 ~ file: questionroute.js:209 ~ router.post ~ existingQuestion:", existingQuestion)
+
     const elem = {
       _id: existingQuestion.id,
       userid:
-      reviewtype === "reported"
-      ? existingQuestion.isreported.by
+        reviewtype === "reported"
+          ? existingQuestion.isreported.by
           : existingQuestion.isadded.by,
       type: reviewtype,
     };
-
-    console.log("🚀 ~ file: questionroute.js:209 ~ router.post ~ elem:", elem);
     return res.status(200).json({
       message: "Question updated successfully",
       elem,
     });
   } catch (error) {
     return res.status(500).json({
-      message: "Error updating question",
-      error: error.message,
+      message: error.message,
     });
   }
 });
 
-router.post("/savequestion",VerifyUser, async (req, res) => {
+router.post("/savequestion", VerifyUser, async (req, res) => {
   try {
     const {
       question,
@@ -287,8 +281,6 @@ router.post("/savequestion",VerifyUser, async (req, res) => {
       difficulty,
       isadded,
     } = req.body.questionElement;
-    console.log("🚀 ~ file: questionroute.js:287 ~ router.post ~ req.body.questionElement:", req.body.questionElement)
-
     const existingQuestion = new Question({
       question,
       options,
@@ -303,11 +295,6 @@ router.post("/savequestion",VerifyUser, async (req, res) => {
     });
 
     const savedQuestion = await existingQuestion.save();
-    console.log(
-      "🚀 ~ file: questionroute.js:299 ~ router.post ~ savedQuestion:",
-      savedQuestion
-    );
-
     const SubjectModel = getModelBasedOnSubject(subject);
     const questioninmodelnew = await SubjectModel.findOne({
       questionid: savedQuestion._id,
@@ -338,14 +325,50 @@ router.post("/savequestion",VerifyUser, async (req, res) => {
   }
 });
 
-router.get("/getreviewquestions", async (req, res) => {
+router.get("/getreviewquestions", VerifyUser, async (req, res) => {
+  try {
+    const num = req.query.n;
+    if (!req.query.n) {
+      return res.status(400).json({
+        message: "Missing parameter: number of questions",
+      });
+    }
+
+    let questions = [];
+    questions = await Question.aggregate([
+      { $match: { "isadded.state": false, "isverified.state": false } },
+      { $sample: { size: Number(num) } },
+    ]).exec();
+    const formattedQuestions = questions.map((question) => ({
+      _id: question._id,
+      question: question.question,
+      options: question.options,
+      answer: question.answer,
+      explanation: question.explanation,
+      subject: question.subject,
+      chapter: question.chapter,
+      mergedunit: question.mergedunit,
+      ispast: question.ispast,
+      isreported: question.isreported,
+      difficulty: question.difficulty,
+    }));
+    return res.status(200).json({
+      message: "Questions fetched successfully",
+      questions: formattedQuestions,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+
+router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
   const num = req.query.n;
   const type = req.query.t;
   if (!req.query.n) {
     return res.status(400).json({
       message: "Missing parameter: number of questions",
-      status: 400,
-      meaning: "badrequest",
     });
   }
 
@@ -394,49 +417,32 @@ router.get("/getreviewquestions", async (req, res) => {
   }
 });
 
-router.post("/reportquestion", async (req, res) => {
-  const { message, questionid } = req.body;
-
-  if (!message || !questionid) {
-    return res.status(400).json({
-      message: "Missing parameters",
-      status: 400,
-      meaning: "badrequest",
-    });
-  }
-
+router.post("/reportquestion", VerifyUser, async (req, res) => {
   try {
+    const { message, questionid } = req.body;
+    if (!message || !questionid) {
+      return res.status(400).json({
+        message: "Missing parameters",
+      });
+    }
+    const userid = req.user.id
     const question = await Question.findById(questionid);
-
     if (!question) {
       return res.status(404).json({
         message: "Question not found",
-        status: 404,
-        meaning: "notfound",
       });
     }
-
-    const authHeader = req.headers.authorization;
-    const userid = authHeader.split(" ")[1];
     question.isreported.state = true;
     question.isreported.by = userid;
-    question.isreported.msg = message;
-
+    question.isreported.message = message;
     await question.save();
-
     return res.status(200).json({
       message: "Question reported successfully",
-      status: 200,
-      meaning: "ok",
-      report: question.isreported,
-      questionid: question._id,
+      _id:question._id
     });
   } catch (error) {
     return res.status(500).json({
-      message: "Error reporting review questions",
-      status: 500,
-      meaning: "internalerror",
-      error: error.message,
+      message: error.message,
     });
   }
 });
