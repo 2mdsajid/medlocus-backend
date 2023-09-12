@@ -174,6 +174,17 @@ const createTodayDateId = () => {
   return dateid;
 };
 
+const groupQuestionsBySubject = async (questions) => {
+  const questionarray = {};
+
+  for (const subject of Object.keys(SUBJECTWEIGHTAGE)) {
+    questionarray[subject] = questions.filter(
+      (question) => question.subject === subject
+    );
+  }
+  return questionarray;
+};
+
 router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
   try {
     const reviewtype = req.query.reviewtype;
@@ -311,12 +322,13 @@ router.post("/savequestion", VerifyUser, async (req, res) => {
       await newSubjectEntry.save();
     }
 
+    const elem = {
+      questionid: savedQuestion._id,
+      userid: savedQuestion.isadded.by,
+    };
     return res.status(200).json({
       message: "question added successfully",
-      elem: {
-        questionid: savedQuestion._id,
-        userid: savedQuestion.isadded.by,
-      },
+      elem,
     });
   } catch (error) {
     return res.status(500).json({
@@ -425,7 +437,7 @@ router.post("/reportquestion", VerifyUser, async (req, res) => {
         message: "Missing parameters",
       });
     }
-    const userid = req.user.id
+    const userid = req.user.id;
     const question = await Question.findById(questionid);
     if (!question) {
       return res.status(404).json({
@@ -438,7 +450,7 @@ router.post("/reportquestion", VerifyUser, async (req, res) => {
     await question.save();
     return res.status(200).json({
       message: "Question reported successfully",
-      _id:question._id
+      _id: question._id,
     });
   } catch (error) {
     return res.status(500).json({
@@ -486,62 +498,170 @@ router.get("/getqnbyid", VerifyUser, async (req, res) => {
 });
 
 router.get("/testquestions/:typeoftest", async (req, res) => {
-  const { model, num, sub, chap } = req.query;
+  const { model, num, sub, chap, unit } = req.query;
   const { typeoftest } = req.params;
-  if (typeoftest === "chapterwise") {
-    // for chapterwise test
+  const numberofquestions = parseInt(num);
+  const TEST_TYPES = [
+    "chapterwise",
+    "unitwise",
+    "subjectwise",
+    "modeltest",
+    "dailytest",
+    "weeklytest",
+  ];
+
+  if (!TEST_TYPES.includes(typeoftest)) {
+    return res.status(400).json({
+      message: "Missing some parameters - type",
+    });
+  }
+
+  if (["chapterwise", "unitwise", "subjectwise"].includes(typeoftest)) {
     if (!sub || !(sub in SUBJECTWEIGHTAGE)) {
       return res.status(400).json({
         message: "Invalid or missing subject",
-        status: 400,
       });
     }
 
-    if (!chap || !isTopicPresent(sub, chap)) {
+    if (typeoftest === "unitwise" || typeoftest === "chapterwise") {
+      if (!unit || !(unit in UNITWEIGHTAGE[sub])) {
+        return res.status(400).json({
+          message: "Invalid or missing unit",
+        });
+      }
+    }
+
+    if (typeoftest === "chapterwise") {
+      const units = UPDATED_SYLLABUS.subjects
+        .find((s) => s.name === sub)
+        .units.find((s) => s.mergedunit === unit);
+      if (!chap || !units.topics.includes(chap)) {
+        return res.status(400).json({
+          message: "Invalid or missing chapter",
+        });
+      }
+    }
+
+    if (!numberofquestions || numberofquestions > 50 || numberofquestions < 5) {
       return res.status(400).json({
-        message:
-          "Invalid or missing chapter or chapter not found for the subject",
-        status: 400,
+        message: "Number of questions must be in range 5 - 50",
       });
     }
+  }
 
-    if (num > 50) {
-      return res.status(400).json({
-        message: "Number of questions cannot exceed 50",
-        status: 400,
-      });
-    }
-
-    const chapquestions = await Question.find(
+  // /* SUBJECTWISE TEST ----------------------------------------- */
+  if (typeoftest === "subjectwise") {
+    const questions = await Question.aggregate([
+      { $match: { subject: sub } },
+      { $sample: { size: numberofquestions } },
       {
-        subject: sub,
-        chapter: chap,
+        $project: {
+          question: 1,
+          options: 1,
+          answer: 1,
+          explanation: 1,
+          subject: 1,
+          chapter: 1,
+          _id: 1,
+        },
       },
-      "question options answer explanation subject chapter _id"
-    );
-    if (chapquestions.length < 0) {
+      {
+        $set: {
+          uans: "",
+          timetaken: 0,
+        },
+      },
+    ]).exec();
+    if (questions.length < 0) {
       return res.status(400).json({
-        message: "cant get chapter questions",
-        status: 400,
+        message: "no questions from this subject",
       });
     }
-
+    const groupedQuestions = await groupQuestionsBySubject(questions);
     return res.status(200).json({
-      message: "Chapter questions found",
-      status: 200,
-      questions: chapquestions,
+      message: "Chapter questions founddddd",
+      questions: groupedQuestions,
     });
-  } else if (typeoftest === "modeltest") {
-    const qnnum = parseInt(num);
-    if (![50, 100, 150, 200].includes(qnnum)) {
+  }
+  ///* UNIT WISE */-------------------------------
+  else if (typeoftest === "unitwise") {
+    const questions = await Question.aggregate([
+      { $match: { subject: sub, mergedunit: unit } },
+      { $sample: { size: numberofquestions } },
+      {
+        $project: {
+          question: 1,
+          options: 1,
+          answer: 1,
+          explanation: 1,
+          subject: 1,
+          chapter: 1,
+          _id: 1,
+        },
+      },
+      {
+        $set: {
+          uans: "",
+          timetaken: 0,
+        },
+      },
+    ]).exec();
+    if (questions.length === 0) {
+      return res.status(400).json({
+        message: "No questions found",
+      });
+    }
+    const groupedQuestions = await groupQuestionsBySubject(questions);
+    return res.status(200).json({
+      message: "unit questions founddddd",
+      questions: groupedQuestions,
+    });
+  }
+  // /* CHAPTERWISE------------------------------------------------------ */
+  else if (typeoftest === "chapterwise") {
+    const questions = await Question.aggregate([
+      { $match: { subject: sub, mergedunit: unit, chapter: chap } },
+      { $sample: { size: numberofquestions } },
+      {
+        $project: {
+          question: 1,
+          options: 1,
+          answer: 1,
+          explanation: 1,
+          subject: 1,
+          chapter: 1,
+          _id: 1,
+        },
+      },
+      {
+        $set: {
+          uans: "",
+          timetaken: 0,
+        },
+      },
+    ]).exec();
+    if (questions.length === 0) {
+      return res.status(400).json({
+        message: "No questions found",
+      });
+    }
+    const groupedQuestions = await groupQuestionsBySubject(questions);
+    return res.status(200).json({
+      message: "unit questions founddddd",
+      questions: groupedQuestions,
+    });
+  }
+  // /* MODEL TEST ---------------------------------- */
+  else if (typeoftest === "modeltest") {
+    if (![50, 100, 150, 200].includes(numberofquestions)) {
       return res.status(400).json({
         message: "number of questions not matched or unusual",
         status: 300,
       });
     }
-    const fraction = qnnum / 200;
+    const fraction = numberofquestions / 200;
     const subjectKeys = Object.keys(SUBJECTWEIGHTAGE);
-    const allRandomQuestions = [];
+    const questions = [];
 
     for (const subject of subjectKeys) {
       const SubjectModel = getModelBasedOnSubject(subject);
@@ -552,57 +672,85 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
         numberOfQuestions,
         totalQuestionsInModel
       );
-      const randomQuestions = await SubjectModel.aggregate([
+      // const randomQuestions = await SubjectModel.aggregate([
+      //   { $sample: { size: questionsToFetch } },
+      // ]);
+
+      // const populatedQuestions = await SubjectModel.populate(randomQuestions, {
+      //   path: "questionid",
+      //   select: "question options answer explanation subject chapter _id",
+      // });
+
+      const selectedquestions = await Question.aggregate([
+        { $match: { subject: subject } },
         { $sample: { size: questionsToFetch } },
-      ]);
+        {
+          $project: {
+            question: 1,
+            options: 1,
+            answer: 1,
+            explanation: 1,
+            subject: 1,
+            chapter: 1,
+            _id: 1,
+          },
+        },
+        {
+          $set: {
+            uans: "",
+            timetaken: 0,
+          },
+        },
+      ]).exec();
 
-      const populatedQuestions = await SubjectModel.populate(randomQuestions, {
-        path: "questionid",
-        select: "question options answer explanation subject chapter _id",
-      });
-
-      const questionIds = populatedQuestions.map((item) => item.questionid);
-      allRandomQuestions.push(...questionIds);
+      // const questionIds = populatedQuestions.map((item) => item.questionid);
+      questions.push(...selectedquestions);
     }
 
-    if (allRandomQuestions.length > qnnum) {
-      allRandomQuestions.pop();
+    if (questions.length > numberofquestions) {
+      questions.pop();
     }
 
+    const groupedQuestions = await groupQuestionsBySubject(questions);
     return res.status(200).json({
-      message: "Questions fetched successfully",
-      status: 200,
-      questions: allRandomQuestions,
+      message: "model questions found",
+      questions: groupedQuestions,
     });
-  } else if (typeoftest === "dailytest") {
+  }
+  // /* DAILY TEST---------------------------- */
+  else if (typeoftest === "dailytest") {
     const dateid = createTodayDateId();
-    const test = await DailyTest.findOne({
-      dateid: dateid,
-    }).populate({
-      path: "questions.question",
-      model: Question,
-      select: "question options answer explanation subject chapter _id",
-    });
-    const qns = test.questions.map((question) => {
-      return question.question;
-    });
-    if (!test) {
+    const testquestions = await DailyTest.findOne({ dateid: dateid })
+      .populate({
+        path: "questions.question",
+        model: Question,
+        select: "question options answer explanation subject chapter _id",
+      })
+      .lean();
+
+    if (!testquestions) {
       return res.status(404).json({
         message: "Daily test not found",
-        status: 404,
       });
     }
+    const questions = await testquestions.questions.map((question) => {
+      return question.question;
+    });
+    const modifiedquestions = await questions.map((question) => ({
+      ...question,
+      uans: "",
+      timetaken: 0,
+    }));
 
+    const groupedQuestions = await groupQuestionsBySubject(modifiedquestions);
     return res.status(200).json({
       message: "Daily test retrieved successfully",
-      status: 200,
-      questions: qns,
+      questions: groupedQuestions,
     });
   }
 
   return res.status(404).json({
     message: "Type of test not found",
-    status: 404,
   });
 });
 
@@ -619,17 +767,11 @@ router.get("/createdailytest", async (req, res) => {
           if (unitWeightage.hasOwnProperty(mergedunit)) {
             const numberOfQuestions = unitWeightage[mergedunit];
 
-            try {
-              const randomQuestions = await subjectModel.aggregate([
-                { $match: { mergedunit: mergedunit } },
-                { $sample: { size: numberOfQuestions } },
-              ]);
-              finalquestions.push(...randomQuestions);
-            } catch (error) {
-              console.error(
-                `Error fetching questions for ${subject} - ${mergedunit}: ${error}`
-              );
-            }
+            const randomQuestions = await subjectModel.aggregate([
+              { $match: { mergedunit: mergedunit } },
+              { $sample: { size: numberOfQuestions } },
+            ]);
+            finalquestions.push(...randomQuestions);
           }
         }
       }
@@ -650,17 +792,26 @@ router.get("/createdailytest", async (req, res) => {
 
     return res.status(200).json({
       message: "Daily test created successfully",
-      status: 200,
       savedtest: savedtest.questions.length,
     });
   } catch (error) {
     return res.status(500).json({
-      message: "Error saving question",
-      status: 500,
-      meaning: "internalerror",
-      error: error.message,
+      message: error.message,
     });
   }
 });
 
 module.exports = router;
+
+/* 
+
+
+    if (!chap || !isTopicPresent(sub, chap)) {
+      return res.status(400).json({
+        message:
+          "Invalid or missing chapter or chapter not found for the subject",
+        status: 400,
+      });
+    }
+
+*/
