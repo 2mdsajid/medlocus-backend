@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
+const { ObjectId } = require("mongodb");
 
 const {
   MECSYLLABUS,
@@ -229,7 +230,6 @@ router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
     existingQuestion.isadded.state = true;
 
     await existingQuestion.save();
-
     if (subjectChanged || chapterChanged || mergedUnitChanged) {
       const OldSubjectModel = getModelBasedOnSubject(oldsub);
       const oldmodelqn = await OldSubjectModel.findOne({
@@ -489,6 +489,58 @@ router.get("/getqnbyid", VerifyUser, async (req, res) => {
     return res.status(200).json({
       message: "Question fetched successfully",
       question: formattedQuestion,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+
+router.post("/getqnsbyid", VerifyUser, async (req, res) => {
+  const ids = req.body.ids;
+  const rep_ids = req.body.rep_ids;
+  const user = req.user;
+
+  if (!ids || !Array.isArray(ids)) {
+    return res.status(400).json({
+      message: "Invalid or missing parameter: questions IDs",
+    });
+  }
+
+  try {
+    const questions = await Question.find({ _id: { $in: ids } }).select(
+      "question _id isverified isreported"
+    );
+
+    let qn_added = [];
+    let qn_reported = [];
+    questions.forEach((question) => {
+      if (question.isreported.state) {
+        qn_reported.push({
+          _id: question._id,
+          question: question.question,
+          isverified: question.isverified.state,
+        });
+      } else {
+        qn_added.push({
+          _id: question._id,
+          question: question.question,
+          isverified: question.isverified.state,
+        });
+      }
+    });
+    
+    if (!questions || questions.length === 0) {
+      return res.status(404).json({
+        message: "Questions not found",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Questions fetched successfully",
+      qn_added,
+      qn_reported,
     });
   } catch (error) {
     return res.status(500).json({
