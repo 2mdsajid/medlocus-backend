@@ -459,6 +459,38 @@ router.post("/reportquestion", VerifyUser, async (req, res) => {
   }
 });
 
+router.post("/flagquestion", VerifyAdmin, async (req, res) => {
+  try {
+    const { message, questionid } = req.body;
+    if (!message || !questionid) {
+      return res.status(400).json({
+        message: "Missing parameters",
+      });
+    }
+    const userid = req.user.id;
+    console.log("🚀 ~ file: questionroute.js:471 ~ router.post ~ userid:", userid)
+    return res.send('jptt')
+    const question = await Question.findById(questionid);
+    if (!question) {
+      return res.status(404).json({
+        message: "Question not found",
+      });
+    }
+    question.isflagged.state = true;
+    question.isflagged.by = userid;
+    question.isflagged.message = message;
+    await question.save();
+    return res.status(200).json({
+      message: "Question Flagged successfully",
+      _id: question._id,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+
 router.get("/getqnbyid", VerifyUser, async (req, res) => {
   const id = req.query.i;
   const user = req.user;

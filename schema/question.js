@@ -89,6 +89,19 @@ const questionSchema = new mongoose.Schema({
       default: Date.now,
     },
   },
+  isflagged: {
+    state: {
+      type: Boolean,
+      default: false,
+    },
+    by: {
+      type: String,
+    },
+    date: {
+      type: Date,
+      default: Date.now,
+    },
+  },
   attempt: {
     type: Number,
     default: 0,
