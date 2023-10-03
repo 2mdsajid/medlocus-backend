@@ -22,6 +22,14 @@ const questionSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
+  images: {
+    qn: String,
+    a: String,
+    b: String,
+    c: String,
+    d: String,
+    exp: String,
+  },
   subject: {
     type: String,
     required: true,

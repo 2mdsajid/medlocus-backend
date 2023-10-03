@@ -291,7 +291,10 @@ router.post("/savequestion", VerifyUser, async (req, res) => {
       ispast,
       difficulty,
       isadded,
+      isverified,
+      images,
     } = req.body.questionElement;
+
     const existingQuestion = new Question({
       question,
       options,
@@ -303,6 +306,8 @@ router.post("/savequestion", VerifyUser, async (req, res) => {
       ispast,
       difficulty,
       isadded,
+      isverified,
+      images
     });
 
     const savedQuestion = await existingQuestion.save();
@@ -444,6 +449,13 @@ router.post("/reportquestion", VerifyUser, async (req, res) => {
         message: "Question not found",
       });
     }
+    if (question.isreported.state) {
+      if (!question.isreported.by === userid) {
+        return res.status(401).json({
+          message: "Question already reported by someone",
+        });
+      }
+    }
     question.isreported.state = true;
     question.isreported.by = userid;
     question.isreported.message = message;
@@ -468,8 +480,7 @@ router.post("/flagquestion", VerifyAdmin, async (req, res) => {
       });
     }
     const userid = req.user.id;
-    console.log("🚀 ~ file: questionroute.js:471 ~ router.post ~ userid:", userid)
-    return res.send('jptt')
+    return res.send("jptt");
     const question = await Question.findById(questionid);
     if (!question) {
       return res.status(404).json({
@@ -562,7 +573,7 @@ router.post("/getqnsbyid", VerifyUser, async (req, res) => {
         });
       }
     });
-    
+
     if (!questions || questions.length === 0) {
       return res.status(404).json({
         message: "Questions not found",
