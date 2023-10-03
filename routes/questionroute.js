@@ -480,7 +480,6 @@ router.post("/flagquestion", VerifyAdmin, async (req, res) => {
       });
     }
     const userid = req.user.id;
-    return res.send("jptt");
     const question = await Question.findById(questionid);
     if (!question) {
       return res.status(404).json({
