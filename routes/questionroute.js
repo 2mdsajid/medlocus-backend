@@ -528,6 +528,7 @@ router.get("/getqnbyid", VerifyUser, async (req, res) => {
       mergedunit: question.mergedunit,
       ispast: question.ispast,
       difficulty: question.difficulty,
+      images: question.images,
     };
     return res.status(200).json({
       message: "Question fetched successfully",
