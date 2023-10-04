@@ -44,6 +44,7 @@ app.use(express.json())
 // Linking the noteroute.js file to the main app
 app.use(require('./routes/questionroute'))
 app.use(require('./routes/userroute'))
+app.use(require('./routes/tests'))
 
 const server = http.createServer(app);
 
