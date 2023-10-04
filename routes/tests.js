@@ -1,8 +1,20 @@
 const express = require("express");
 const router = express.Router();
 
+const {
+  MECSYLLABUS,
+  UNITWEIGHTAGE,
+  SUBJECTWEIGHTAGE,
+  UPDATED_SYLLABUS,
+} = require("../public/syllabus.js");
+
 const DailyTest = require("../schema/dailytest");
-const Question = require("../schema/question"); // Import the Question model
+const Question = require("../schema/question")
+const Botany = require("../schema/botany");
+const Zoology = require("../schema/zoology");
+const Physics = require("../schema/physics");
+const Chemistry = require("../schema/chemistry");
+const Mat = require("../schema/mat");
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 
 const createTodayDateId = () => {
@@ -12,6 +24,32 @@ const createTodayDateId = () => {
   const day = String(currentDate.getDate()).padStart(2, "0");
   const dateid = `${year}-${month}-${day}`;
   return dateid;
+};
+
+const getModelBasedOnSubject = (subject) => {
+  let SubjectModel;
+  switch (subject) {
+    case "botany":
+      SubjectModel = Botany;
+      break;
+    case "zoology":
+      SubjectModel = Zoology;
+      break;
+    case "physics":
+      SubjectModel = Physics;
+      break;
+    case "chemistry":
+      SubjectModel = Chemistry;
+      break;
+    case "mat":
+      SubjectModel = Mat;
+      break;
+    default:
+      // Handle invalid subject
+      return "zoology";
+  }
+
+  return SubjectModel;
 };
 
 router.get("/testquestions/:typeoftest", async (req, res) => {
