@@ -150,16 +150,23 @@ router.post("/savedraft", VerifyMedlocusAdmin, async (req, res, next) => {
 // Get all notes - get single note by id // query ?i=noteid
 router.get("/getnotes", async (req, res) => {
   try {
-    const { i } = req.query;
+    const { i, v } = req.query;
+    console.log("🚀 ~ file: notesroute.js:154 ~ router.get ~ req.query:", req.query)
     if (i) {
       const note = await Note.findOne({ noteid: i }).select(
-        "_id noteid title category author content introimage intro keywords readtime upvote comments date"
+        "_id noteid title category author content introimage intro keywords readtime upvote comments date views"
       );
       if (!note) {
         return res.status(404).json({
           message: "cant find note",
         });
       }
+      // to increase the views --- with same request
+      if(v && v==='true'){
+        note.views = note.views + 1;
+        await note.save();
+      }
+      console.log("🚀 ~ file: notesroute.js:165 ~ router.get ~ note:", note)
       return res.status(200).json({
         note,
         message: "note fetched successfully",
@@ -171,7 +178,7 @@ router.get("/getnotes", async (req, res) => {
     );
     if (notes.length === 0) {
       return res.status(400).json({
-        message: "No Not Available",
+        message: "No Notes Available",
       });
     }
     return res.status(200).json({
@@ -189,9 +196,9 @@ router.get("/getnotes", async (req, res) => {
 router.get("/findallnotes", VerifyMedlocusAdmin, async (req, res) => {
   try {
     const { i } = req.query;
-    console.log("🚀 ~ file: notesroute.js:192 ~ router.get ~ i:", i)
+    console.log("🚀 ~ file: notesroute.js:192 ~ router.get ~ i:", i);
     if (i) {
-      const note = await Note.findOne({ _id: i })
+      const note = await Note.findOne({ _id: i });
       if (!note) {
         return res.status(404).json({
           message: "cant find note",
@@ -212,6 +219,26 @@ router.get("/findallnotes", VerifyMedlocusAdmin, async (req, res) => {
     return res.status(200).json({
       notes,
       message: "Draft notes fetched successfully",
+    });
+  } catch (error) {
+    return res.status(501).json({
+      message: error.message,
+    });
+  }
+});
+
+// add views
+router.post("/addviews", async (req, res) => {
+  try {
+    const { id } = req.body;
+    const note = await Note.findOne({ _id: id });
+    if (!note) {
+      return null;
+    }
+    note.views = note.views + 1;
+    await note.save();
+    return res.status(201).json({
+      message: "voted successfully",
     });
   } catch (error) {
     return res.status(501).json({
