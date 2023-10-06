@@ -167,12 +167,12 @@ router.get("/getnotes", async (req, res) => {
     }
 
     const notes = await Note.find({ review: false, published: true }).select(
-      "_id noteid title category author content introimage intro keywords readtime upvote comments date"
+      "_id noteid title category author introimage intro readtime date"
     );
     if (notes.length === 0) {
       return res.status(400).json({
         message: "Unable to fetch the notes",
-      });
+      })
     }
     return res.status(200).json({
       notes,
