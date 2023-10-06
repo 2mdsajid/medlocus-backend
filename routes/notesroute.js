@@ -2,7 +2,11 @@ const express = require("express");
 const router = express.Router();
 
 const Note = require("../schema/note");
-const { VerifyUser, VerifyAdmin,VerifyMedlocusAdmin } = require("../middlewares/middlewares");
+const {
+  VerifyUser,
+  VerifyAdmin,
+  VerifyMedlocusAdmin,
+} = require("../middlewares/middlewares");
 
 /*  ADDING NOTES TO DATABASE */
 router.post("/savenote", VerifyMedlocusAdmin, async (req, res, next) => {
@@ -20,7 +24,10 @@ router.post("/savenote", VerifyMedlocusAdmin, async (req, res, next) => {
       readtime,
       introimage,
     } = req.body;
-    console.log("🚀 ~ file: notesroute.js:23 ~ router.post ~ req.body:", req.body)
+    console.log(
+      "🚀 ~ file: notesroute.js:23 ~ router.post ~ req.body:",
+      req.body
+    );
 
     let newnote;
 
@@ -39,7 +46,7 @@ router.post("/savenote", VerifyMedlocusAdmin, async (req, res, next) => {
       newnote.content = content;
       newnote.keywords = keywords || "";
       newnote.readtime = readtime;
-      newnote.introimage = introimage;
+      newnote.introimage = introimage || "";
       newnote.isupdated.state = true;
 
       const saved = await newnote.save();
@@ -55,7 +62,7 @@ router.post("/savenote", VerifyMedlocusAdmin, async (req, res, next) => {
         published: true,
         keywords: keywords || "",
         readtime,
-        introimage,
+        introimage: introimage || "",
       });
       await newnote.save();
     }
@@ -162,10 +169,10 @@ router.get("/getnotes", async (req, res) => {
     const notes = await Note.find({ review: false, published: true }).select(
       "_id noteid title category author content introimage intro keywords readtime upvote comments date"
     );
-    if (notes.length===0) {
+    if (notes.length === 0) {
       return res.status(400).json({
         message: "Unable to fetch the notes",
-      })
+      });
     }
     return res.status(200).json({
       notes,

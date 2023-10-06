@@ -31,7 +31,7 @@ const note = mongoose.Schema({
     },
     introimage: {
         type: String,
-        required: false
+        default: ''
     },
     review: {
         type: Boolean,
