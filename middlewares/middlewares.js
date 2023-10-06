@@ -35,6 +35,35 @@ const VerifyAdmin = async (req, res, next) => {
       return res.status(401).json({ message: "Invalid token" });
   }
 };
+// Middleware for token verification
+const VerifyMedlocusAdmin = async (req, res, next) => {
+  const bearer = req.headers.authorization;
+  const token = bearer ? bearer.split(" ")[1] : null;
+  if (!token) {
+      return res.status(401).json({ message: "Unauthorized" });
+  }
+  try {
+      const secretkey = process.env.JWT_SECRET_KEY
+      const user = jwt.verify(token, secretkey);
+      console.log("🚀 ~ file: middlewares.js:15 ~ VerifyAdmin ~ user:", user)
+
+      const {username,password} = user
+      const admin = await Admin.findOne({username})
+      console.log("🚀 ~ file: middlewares.js:19 ~ VerifyAdmin ~ admin:", admin)
+      if(!admin) {
+        return res.status(403).json({ message: "Access forbidden for non-admin users" });
+      }
+
+      if(admin.password !== password){
+        return res.status(403).json({ message: "Access forbidden for non-admin users" });
+      }
+
+      req.user = user;
+      next();
+  } catch (error) {
+      return res.status(401).json({ message: "Invalid token" });
+  }
+};
 
 const VerifyUser = (req, res, next) => {
   const bearer = req.headers.authorization;
@@ -54,4 +83,4 @@ const VerifyUser = (req, res, next) => {
   }
 };
 
-module.exports = { VerifyAdmin, VerifyUser };
+module.exports = { VerifyAdmin, VerifyUser,VerifyMedlocusAdmin };

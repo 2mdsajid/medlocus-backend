@@ -9,7 +9,7 @@ const {
 } = require("../public/syllabus.js");
 
 const DailyTest = require("../schema/dailytest");
-const Question = require("../schema/question")
+const Question = require("../schema/question");
 const Botany = require("../schema/botany");
 const Zoology = require("../schema/zoology");
 const Physics = require("../schema/physics");
@@ -50,6 +50,17 @@ const getModelBasedOnSubject = (subject) => {
   }
 
   return SubjectModel;
+};
+
+const groupQuestionsBySubject = async (questions) => {
+  const questionarray = {};
+
+  for (const subject of Object.keys(SUBJECTWEIGHTAGE)) {
+    questionarray[subject] = questions.filter(
+      (question) => question.subject === subject
+    );
+  }
+  return questionarray;
 };
 
 router.get("/testquestions/:typeoftest", async (req, res) => {
@@ -381,7 +392,10 @@ router.get("/getdailytests", VerifyUser, async (req, res) => {
       test: dailytest,
     });
   }
-  const dailytests = await DailyTest.find().select("_id dateid");
+
+  const dailytests = await DailyTest.find({ archive: true }).select(
+    "_id dateid"
+  );
   if (!dailytests) {
     return res.status(400).json({
       message: "cant find tests",

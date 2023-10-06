@@ -13,11 +13,9 @@ const dotenv = require('dotenv')
 dotenv.config({ path: './config.env' })
 
 // Getting the port value from the .env file or defaulting to 5000
-const PORT = process.env.PORT || 3001
+const PORT = process.env.PORT || 3002
 
 // Connecting to the MongoDB database
-// require('./db/mongo')
-// require('./db/mongo2')
 require('./db/mongo.js')
 
 // Serving static files from the 'public' folder
@@ -45,6 +43,7 @@ app.use(express.json())
 app.use(require('./routes/questionroute'))
 app.use(require('./routes/userroute'))
 app.use(require('./routes/tests'))
+app.use(require('./routes/notesroute'))
 
 const server = http.createServer(app);
 
