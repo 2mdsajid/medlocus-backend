@@ -171,8 +171,8 @@ router.get("/getnotes", async (req, res) => {
     );
     if (notes.length === 0) {
       return res.status(400).json({
-        message: "Unable to fetch the notes",
-      })
+        message: "No Not Available",
+      });
     }
     return res.status(200).json({
       notes,
@@ -188,6 +188,21 @@ router.get("/getnotes", async (req, res) => {
 // to get all the notes in the draft
 router.get("/findallnotes", VerifyMedlocusAdmin, async (req, res) => {
   try {
+    const { i } = req.query;
+    console.log("🚀 ~ file: notesroute.js:192 ~ router.get ~ i:", i)
+    if (i) {
+      const note = await Note.findOne({ _id: i })
+      if (!note) {
+        return res.status(404).json({
+          message: "cant find note",
+        });
+      }
+      return res.status(200).json({
+        note,
+        message: "note fetched successfully",
+      });
+    }
+
     const notes = await Note.find();
     if (!notes) {
       return res.status(400).json({
