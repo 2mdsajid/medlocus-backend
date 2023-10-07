@@ -26,6 +26,9 @@ const dailytest = mongoose.Schema({
       userid: {
         type: String,
       },
+      name: {
+        type: String,
+      },
       totalscore: {
         type: String,
       },
