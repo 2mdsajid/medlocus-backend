@@ -342,23 +342,39 @@ router.get("/createdailytest", async (req, res) => {
         }
       }
     }
-
     const questionsArray = finalquestions.map((questionid) => {
       return {
         question: questionid.questionid,
       };
     });
-
     const dailytest = new DailyTest({
       dateid: dateid,
       questions: questionsArray,
     });
-
     const savedtest = await dailytest.save();
-
     return res.status(200).json({
       message: "Daily test created successfully",
       savedtest: savedtest.questions.length,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+router.get("/invalidatedailytest", async (req, res) => {
+  try {
+    const dateid = createTodayDateId();
+    const dailytest = await DailyTest.findOne({ dateid });
+    if (!dailytest) {
+      return res.status(200).json({
+        message: "No Test Found",
+      });
+    }
+    dailytest.archive = true;
+    const savedtest = await dailytest.save();
+    return res.status(200).json({
+      message: "Daily test archived successfully",
     });
   } catch (error) {
     return res.status(500).json({
