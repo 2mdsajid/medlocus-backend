@@ -105,6 +105,9 @@ const questionSchema = new mongoose.Schema({
     by: {
       type: String,
     },
+    message: {
+      type: String,
+    },
     date: {
       type: Date,
       default: Date.now,

@@ -464,6 +464,39 @@ router.post("/reportquestion", VerifyUser, async (req, res) => {
   }
 });
 
+router.post("/approvequestion", VerifyAdmin, async (req, res) => {
+  try {
+    const { questionid } = req.body;
+    if ( !questionid) {
+      return res.status(400).json({
+        message: "Missing parameters",
+      });
+    }
+    const userid = req.user.id;
+    const question = await Question.findById(questionid);
+    if (!question) {
+      return res.status(404).json({
+        message: "Question not found",
+      });
+    }
+    if(question.isverified.state===true){
+      return res.status(200).json({
+        message: "Question Already Approved",
+      });
+    }
+    question.isverified.state = true;
+    question.isverified.by = userid;
+    await question.save();
+    return res.status(200).json({
+      message: "Question Approved successfully",
+      _id: question._id,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
 router.post("/flagquestion", VerifyAdmin, async (req, res) => {
   try {
     const { message, questionid } = req.body;
@@ -483,6 +516,7 @@ router.post("/flagquestion", VerifyAdmin, async (req, res) => {
     question.isflagged.by = userid;
     question.isflagged.message = message;
     await question.save();
+    console.log("🚀 ~ file: questionroute.js:515 ~ router.post ~ question:", question)
     return res.status(200).json({
       message: "Question Flagged successfully",
       _id: question._id,
