@@ -286,7 +286,7 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
   // /* DAILY TEST---------------------------- */
   else if (typeoftest === "dailytest") {
     const dateid = createTodayDateId();
-    const testquestions = await DailyTest.findOne({ dateid: dateid })
+    const testquestions = await DailyTest.findOne({ dateid: dateid, archive:false })
       .populate({
         path: "questions.question",
         model: Question,
@@ -314,7 +314,6 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
       questions: groupedQuestions,
     });
   }
-
   return res.status(404).json({
     message: "Type of test not found",
   });
