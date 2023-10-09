@@ -390,7 +390,7 @@ router.get("/getdailytests", VerifyUser, async (req, res) => {
       .populate({
         path: "questions.question",
         model: Question,
-        select: "question options answer _id",
+        select: "question options answer _id explanation",
       })
       .lean();
     if (!dailytest) {
@@ -398,9 +398,15 @@ router.get("/getdailytests", VerifyUser, async (req, res) => {
         message: "cant find test",
       });
     }
+
+    const questions = await dailytest.questions.map((question) => {
+      return question.question;
+    });
     dailytest.usersattended = dailytest.usersattended
       .sort((a, b) => Number(b.totalscore) - Number(a.totalscore))
       .map((user, index) => ({ ...user, rank: index + 1 }));
+
+    dailytest.questions = questions;
     return res.status(200).json({
       message: "Tests fetched",
       test: dailytest,
