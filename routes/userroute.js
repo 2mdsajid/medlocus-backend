@@ -16,18 +16,14 @@ const Admin = require("../schema/admin");
 
 const createAdmin = async () => {
   const createdadmin = new Admin({
-    username: "2mdsajid",
+    username: "2alamsajid",
     name: "sajid",
-    email: "2mdsajid@gmail.com",
+    email: "2alamsajid@gmail.com",
     key: "asecretkey",
     password: "boredofmakingthissite",
   });
 
   await createdadmin.save();
-  console.log(
-    "🚀 ~ file: userroute.js:29 ~ createAdmin ~ createdadmin:",
-    createdadmin
-  );
 };
 
 // createAdmin()
@@ -90,59 +86,63 @@ router.post("/sendconfirmationemail", async (req, res) => {
 });
 
 router.get("/addusertotest", async (req, res) => {
-  const name = req.query.name;
-  const testid = createTodayDateId();
+  const userid = req.query.userid;
+  console.log("🚀 ~ file: userroute.js:90 ~ router.get ~ userid:", userid)
+  const dateid = createTodayDateId();
   const test = await DailyTest.findOne({
-    testid,
+    dateid: dateid,
   });
   if (!test) {
     return res.status(400).json({
       message: "cant fin test",
-      status: 400,
     });
   }
 
-  test.usersconnected.push(name);
+  const userExists = test.usersattended.some((user) => user.userid === userid);
+  if (userExists) {
+    return res.status(400).json({
+      message: "You Have Already attended the test",
+    });
+  }
+
+  test.usersconnected.push(userid);
   const savedest = await test.save();
 
   return res.status(200).json({
     message: "saved connecteduser",
-    status: 200,
-    savedest,
   });
 });
 
 router.post("/addusertotest", async (req, res) => {
-  const testid = createTodayDateId();
-  const { userid, score } = req.body;
-  console.log("🚀 ~ file: userroute.js:99 ~ router.post ~ req.body:", req.body);
+  const dateid = createTodayDateId();
+  const { userid, name, score } = req.body;
   if (!userid) {
     return res.status(400).json({
-      message: "no userid or nam eprovided",
-      status: 400,
+      message: "no userid or name provided",
     });
   }
-
   const test = await DailyTest.findOne({
-    testid,
+    dateid: dateid,
   });
-  if (!test) {
+  if (!test || test.archive === true) {
     return res.status(400).json({
-      message: "cant fin test",
-      status: 400,
+      message: "cant find test",
     });
   }
-
+  const userExists = test.usersattended.some((user) => user.userid === userid);
+  if (userExists) {
+    return res.status(400).json({
+      message: "Already attended the test",
+    });
+  }
   test.usersattended.push({
     userid,
+    name,
     totalscore: score,
   });
-
   const savedest = await test.save();
-
   return res.status(200).json({
     message: "saved user score",
-    status: 200,
     savedest,
   });
 });

@@ -398,11 +398,9 @@ router.get("/getdailytests", VerifyUser, async (req, res) => {
         message: "cant find test",
       });
     }
-
     dailytest.usersattended = dailytest.usersattended
       .sort((a, b) => Number(b.totalscore) - Number(a.totalscore))
       .map((user, index) => ({ ...user, rank: index + 1 }));
-
     return res.status(200).json({
       message: "Tests fetched",
       test: dailytest,
