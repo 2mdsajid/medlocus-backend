@@ -68,7 +68,7 @@ const generateRandomQuestions = () => {
           difficulty: randomDifficulty,
           isadded: {
             state: false,
-            by: "51ae7f08-9e06-41b7-a00c-5c4567a01a50",
+            by: "6266918c-c0be-4e1d-821a-1649070652cd",
           },
         };
 
@@ -260,6 +260,7 @@ router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
           : existingQuestion.isadded.by,
       type: reviewtype,
     };
+    console.log("🚀 ~ file: questionroute.js:263 ~ router.post ~ elem:", elem)
     return res.status(200).json({
       message: "Question updated successfully",
       elem,
@@ -490,6 +491,7 @@ router.post("/approvequestion", VerifyAdmin, async (req, res) => {
     return res.status(200).json({
       message: "Question Approved successfully",
       _id: question._id,
+      addedby: question.isadded.by,
     });
   } catch (error) {
     return res.status(500).json({
