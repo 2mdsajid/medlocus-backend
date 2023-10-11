@@ -36,6 +36,7 @@ app.get('/',(req, res) => {
     res.json({msg:"bro yrr do not cause unnecessary redirect"})
 })
 
+
 //before AUTH.JS loading so that it effects
 app.use(express.json())
 
@@ -44,6 +45,7 @@ app.use(require('./routes/questionroute'))
 app.use(require('./routes/userroute'))
 app.use(require('./routes/tests'))
 app.use(require('./routes/notesroute'))
+app.use(require('./routes/analytics'))
 
 const server = http.createServer(app);
 
