@@ -81,7 +81,6 @@ const questionSchema = new mongoose.Schema({
     },
     date: {
       type: Date,
-      default: Date.now,
     },
   },
   isverified: {
@@ -94,7 +93,6 @@ const questionSchema = new mongoose.Schema({
     },
     date: {
       type: Date,
-      default: Date.now,
     },
   },
   isflagged: {
@@ -110,7 +108,6 @@ const questionSchema = new mongoose.Schema({
     },
     date: {
       type: Date,
-      default: Date.now,
     },
   },
   attempt: {
