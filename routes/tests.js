@@ -196,6 +196,7 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
           explanation: 1,
           subject: 1,
           chapter: 1,
+          images:1,
           _id: 1,
         },
       },

@@ -17,8 +17,19 @@ const Physics = require("../schema/physics");
 const Chemistry = require("../schema/chemistry");
 const Mat = require("../schema/mat");
 const DailyTest = require("../schema/dailytest");
+const fs = require("fs").promises;
 
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
+
+
+// public directory
+const path = require('path');
+
+const publicFolderPath = path.join(__dirname, 'public')
+const fileName = 'new_questions.json';
+const filePath = path.join(publicFolderPath, fileName);
+
+const questionsData = require('./new_questions.js')
 
 // Function to generate random questions based on unit weightage
 const generateRandomQuestions = () => {
@@ -79,6 +90,56 @@ const generateRandomQuestions = () => {
 
   return randomQuestions;
 };
+
+const addToCloud = async () => {
+  try {
+    // Read the JSON file containing questions
+    const data = await fs.readFile('../new_questions.json', 'utf8');
+    const questions = JSON.parse(data);
+
+    // Step 1: Insert all questions into the Question model
+    await Question.insertMany(questions);
+    const allQuestions = await Question.find();
+
+    // Create an object to store questions grouped by subject
+    const questionsBySubject = {};
+
+    // Group questions by subject
+    allQuestions.forEach((question) => {
+      const subject = question.subject;
+
+      if (!questionsBySubject[subject]) {
+        questionsBySubject[subject] = [];
+      }
+
+      questionsBySubject[subject].push({
+        mergedunit: question.mergedunit,
+        chapter: question.chapter,
+        questionid: question._id,
+      });
+    });
+
+    // Iterate through the subject models and insert the grouped questions
+    const SubjectModels = [...new Set(allQuestions.map((q) => q.subject))];
+
+    for (const model of SubjectModels) {
+      const SubjectModel = getModelBasedOnSubject(model);
+      const subjectQuestions = questionsBySubject[model];
+
+      if (subjectQuestions && subjectQuestions.length > 0) {
+        await SubjectModel.insertMany(subjectQuestions);
+        console.log(` ${model} - ${questions.length} questions inserted successfully.`);
+      }
+    }
+
+    console.log('Questions organized and inserted .');
+  } catch (error) {
+    console.error('Error organizing and inserting questions:', error);
+  }
+};
+// 
+
+// addToCloud()
 
 const organizeQuestionsBySubject = async () => {
   try {
@@ -165,8 +226,6 @@ const isTopicPresent = (subjectName, topicToCheck) => {
   }
   return false;
 };
-
-
 
 const groupQuestionsBySubject = async (questions) => {
   const questionarray = {};
@@ -260,7 +319,6 @@ router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
           : existingQuestion.isadded.by,
       type: reviewtype,
     };
-    console.log("🚀 ~ file: questionroute.js:263 ~ router.post ~ elem:", elem)
     return res.status(200).json({
       message: "Question updated successfully",
       elem,
@@ -301,7 +359,7 @@ router.post("/savequestion", VerifyUser, async (req, res) => {
       difficulty,
       isadded,
       isverified,
-      images
+      images,
     });
 
     const savedQuestion = await existingQuestion.save();
@@ -468,7 +526,7 @@ router.post("/reportquestion", VerifyUser, async (req, res) => {
 router.post("/approvequestion", VerifyAdmin, async (req, res) => {
   try {
     const { questionid } = req.body;
-    if ( !questionid) {
+    if (!questionid) {
       return res.status(400).json({
         message: "Missing parameters",
       });
@@ -480,7 +538,7 @@ router.post("/approvequestion", VerifyAdmin, async (req, res) => {
         message: "Question not found",
       });
     }
-    if(question.isverified.state===true){
+    if (question.isverified.state === true) {
       return res.status(200).json({
         message: "Question Already Approved",
       });
@@ -499,6 +557,7 @@ router.post("/approvequestion", VerifyAdmin, async (req, res) => {
     });
   }
 });
+
 router.post("/flagquestion", VerifyAdmin, async (req, res) => {
   try {
     const { message, questionid } = req.body;
@@ -518,7 +577,6 @@ router.post("/flagquestion", VerifyAdmin, async (req, res) => {
     question.isflagged.by = userid;
     question.isflagged.message = message;
     await question.save();
-    console.log("🚀 ~ file: questionroute.js:515 ~ router.post ~ question:", question)
     return res.status(200).json({
       message: "Question Flagged successfully",
       _id: question._id,
@@ -620,8 +678,6 @@ router.post("/getqnsbyid", VerifyUser, async (req, res) => {
     });
   }
 });
-
-
 
 module.exports = router;
 
