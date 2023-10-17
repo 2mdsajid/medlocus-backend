@@ -5,9 +5,18 @@ const adminSchema = new mongoose.Schema({
     type: "string",
     required: true,
   },
+  uuid: {
+    type: "string",
+    required: true,
+    unique: true,
+  },
   password: {
     type: "string",
     required: true,
+  },
+  questions: {
+    type: "number",
+    default:0,
   },
   name: {
     type: "string",

@@ -17,19 +17,19 @@ const Physics = require("../schema/physics");
 const Chemistry = require("../schema/chemistry");
 const Mat = require("../schema/mat");
 const DailyTest = require("../schema/dailytest");
+const Admin = require("../schema/admin");
 const fs = require("fs").promises;
 
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 
-
 // public directory
-const path = require('path');
+const path = require("path");
 
-const publicFolderPath = path.join(__dirname, 'public')
-const fileName = 'new_questions.json';
+const publicFolderPath = path.join(__dirname, "public");
+const fileName = "new_questions.json";
 const filePath = path.join(publicFolderPath, fileName);
 
-const questionsData = require('./new_questions.js')
+// const questionsData = require('./new_questions.js')
 
 // Function to generate random questions based on unit weightage
 const generateRandomQuestions = () => {
@@ -94,24 +94,18 @@ const generateRandomQuestions = () => {
 const addToCloud = async () => {
   try {
     // Read the JSON file containing questions
-    const data = await fs.readFile('../new_questions.json', 'utf8');
+    const data = await fs.readFile("../new_questions.json", "utf8");
     const questions = JSON.parse(data);
 
-    // Step 1: Insert all questions into the Question model
-    await Question.insertMany(questions);
+    const newQuestions = await Question.insertMany(questions);
     const allQuestions = await Question.find();
 
-    // Create an object to store questions grouped by subject
     const questionsBySubject = {};
-
-    // Group questions by subject
-    allQuestions.forEach((question) => {
+    newQuestions.forEach((question) => {
       const subject = question.subject;
-
       if (!questionsBySubject[subject]) {
         questionsBySubject[subject] = [];
       }
-
       questionsBySubject[subject].push({
         mergedunit: question.mergedunit,
         chapter: question.chapter,
@@ -120,24 +114,28 @@ const addToCloud = async () => {
     });
 
     // Iterate through the subject models and insert the grouped questions
-    const SubjectModels = [...new Set(allQuestions.map((q) => q.subject))];
-
+    const SubjectModels = [...new Set(newQuestions.map((q) => q.subject))];
     for (const model of SubjectModels) {
       const SubjectModel = getModelBasedOnSubject(model);
       const subjectQuestions = questionsBySubject[model];
-
       if (subjectQuestions && subjectQuestions.length > 0) {
         await SubjectModel.insertMany(subjectQuestions);
-        console.log(` ${model} - ${questions.length} questions inserted successfully.`);
+        console.log(
+          ` ${model} - ${questions.length} questions inserted successfully.`
+        );
       }
     }
 
-    console.log('Questions organized and inserted .');
+    const admin = await Admin.findOne({ uuid: newQuestions[0].isadded.by });
+    admin.questions = admin.questions + questions.length
+    await admin.save();
+    console.log(admin)
+
+    console.log("Questions organized and inserted .");
   } catch (error) {
-    console.error('Error organizing and inserting questions:', error);
+    console.error("Error organizing and inserting questions:", error);
   }
 };
-// 
 
 // addToCloud()
 
