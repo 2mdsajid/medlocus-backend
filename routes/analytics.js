@@ -10,11 +10,8 @@ const {
 
 const DailyTest = require("../schema/dailytest");
 const Question = require("../schema/question");
-const Botany = require("../schema/botany");
-const Zoology = require("../schema/zoology");
-const Physics = require("../schema/physics");
-const Chemistry = require("../schema/chemistry");
-const Mat = require("../schema/mat");
+const Admin = require("../schema/admin");
+
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 
 router.get("/analytics", async (req, res) => {
@@ -106,6 +103,17 @@ router.get("/analytics", async (req, res) => {
       });
     });
 
+    const modifiedadmins = [];
+    const admins = await Admin.find().select("name questions");
+    admins.forEach((admin) => {
+      modifiedadmins.push({
+        name: admin.name,
+        "Number Of Questions": admin.questions,
+      });
+    });
+
+    console.log("🚀 ~ file: analytics.js:109 ~ router.get ~ admins:", modifiedadmins);
+
     res.status(200).json({
       totalQuestions,
       verifiedQuestions,
@@ -114,6 +122,7 @@ router.get("/analytics", async (req, res) => {
       subjectWiseChapters,
       subjectWiseMergedUnits,
       questionsAddedByDate,
+      modifiedadmins
     });
   } catch (error) {
     res

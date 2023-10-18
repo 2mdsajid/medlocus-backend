@@ -16,15 +16,15 @@ const Admin = require("../schema/admin");
 
 const createAdmin = async () => {
   const createdadmin = new Admin({
-    uuid:'65ddd2e4-742d-4ebd-89f2-6d978f7c5ca3',
-    username: "2alamsajid",
-    name: "sajid",
-    email: "2alamsajid@gmail.com",
-    key: "asecretkey",
-    password: "boredofmakingthissite",
+    uuid:'',
+    username: "",
+    name: "",
+    email: "",
+    key: "",
+    password: "",
   });
 
-  await createdadmin.save();
+  const admincreated = await createdadmin.save();
 };
 
 // createAdmin()
