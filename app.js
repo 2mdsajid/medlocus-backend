@@ -46,7 +46,7 @@ app.use(require('./routes/userroute'))
 app.use(require('./routes/tests'))
 app.use(require('./routes/notesroute'))
 app.use(require('./routes/analytics'))
-app.use(require('./routes/htmxtut'))
+// app.use(require('./routes/htmxtut'))
 app.use(require('./routes/addfile'))
 
 const server = http.createServer(app);
