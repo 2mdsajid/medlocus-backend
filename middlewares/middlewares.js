@@ -14,6 +14,7 @@ const VerifyAdmin = async (req, res, next) => {
       const user = jwt.verify(token, secretkey);
       const {email,secret} = user
       const admin = await Admin.findOne({email})
+      console.log("🚀 ~ file: middlewares.js:17 ~ VerifyAdmin ~ admin:", admin)
       if(!admin) {
         return res.status(403).json({ message: "Access forbidden for non-admin users" });
       }
@@ -26,7 +27,7 @@ const VerifyAdmin = async (req, res, next) => {
           return res.status(403).json({ message: "Access forbidden for non-admin users" });
       }
 
-      req.user = user;
+      req.user = admin;
       next();
   } catch (error) {
       return res.status(401).json({ message: "Invalid token" });

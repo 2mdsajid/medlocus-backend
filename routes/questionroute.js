@@ -127,9 +127,9 @@ const addToCloud = async () => {
     }
 
     const admin = await Admin.findOne({ uuid: newQuestions[0].isadded.by });
-    admin.questions = admin.questions + questions.length
+    admin.questions = admin.questions + questions.length;
     await admin.save();
-    console.log(admin)
+
 
     console.log("Questions organized and inserted .");
   } catch (error) {
