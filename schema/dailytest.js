@@ -4,6 +4,7 @@ const dailytest = mongoose.Schema({
   dateid: {
     type: String,
     required: true,
+    unique: true,
   },
   questions: [
     {

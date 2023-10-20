@@ -509,6 +509,7 @@ router.post("/reportquestion", VerifyUser, async (req, res) => {
     question.isreported.state = true;
     question.isreported.by = userid;
     question.isreported.message = message;
+    question.isverified.state = false;
     await question.save();
     return res.status(200).json({
       message: "Question reported successfully",

@@ -196,7 +196,7 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
           explanation: 1,
           subject: 1,
           chapter: 1,
-          images:1,
+          images: 1,
           _id: 1,
         },
       },
@@ -239,15 +239,6 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
         numberOfQuestions,
         totalQuestionsInModel
       );
-      // const randomQuestions = await SubjectModel.aggregate([
-      //   { $sample: { size: questionsToFetch } },
-      // ]);
-
-      // const populatedQuestions = await SubjectModel.populate(randomQuestions, {
-      //   path: "questionid",
-      //   select: "question options answer explanation subject chapter _id",
-      // });
-
       const selectedquestions = await Question.aggregate([
         { $match: { subject: subject } },
         { $sample: { size: questionsToFetch } },
@@ -287,7 +278,10 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
   // /* DAILY TEST---------------------------- */
   else if (typeoftest === "dailytest") {
     const dateid = createTodayDateId();
-    const testquestions = await DailyTest.findOne({ dateid: dateid, archive:false })
+    const testquestions = await DailyTest.findOne({
+      dateid: dateid,
+      archive: false,
+    })
       .populate({
         path: "questions.question",
         model: Question,
@@ -324,6 +318,15 @@ router.get("/createdailytest", async (req, res) => {
   try {
     let finalquestions = [];
     const dateid = createTodayDateId();
+
+    const existingdate = await DailyTest.findOne({
+      dateid: dateid,
+    });
+    if (existingdate) {
+      return res.status(301).json({
+        message: "Daily Test Already exist",
+      });
+    }
     for (const subject in UNITWEIGHTAGE) {
       if (UNITWEIGHTAGE.hasOwnProperty(subject)) {
         const subjectModel = getModelBasedOnSubject(subject);
@@ -369,6 +372,11 @@ router.get("/invalidatedailytest", async (req, res) => {
     if (!dailytest) {
       return res.status(200).json({
         message: "No Test Found",
+      });
+    }
+    if(dailytest.archive === true){
+      return res.status(500).json({
+        message: 'Test Already Archived',
       });
     }
     dailytest.archive = true;
