@@ -67,6 +67,7 @@ const assignUnit = async (questions, addedby, mergedunit, sub) => {
           subject: question.sub,
           chapter: question.topic,
           mergedunit: question.mergedunit,
+          explanation: question.explanation,
           difficulty: question.difficulty ? question.difficulty[0] : "m",
           isadded: {
             state: true,
