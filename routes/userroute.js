@@ -14,9 +14,10 @@ const transporter = nodemailer.createTransport({
 const DailyTest = require("../schema/dailytest");
 const Admin = require("../schema/admin");
 
+const { sendEmail, LOGO_URL } = require("./gmailroute");
 const createAdmin = async () => {
   const createdadmin = new Admin({
-    uuid:'',
+    uuid: "",
     username: "",
     name: "",
     email: "",
@@ -38,57 +39,9 @@ const createTodayDateId = () => {
   return dateid;
 };
 
-// add feedback and mail it to the owner
-router.post("/sendconfirmationemail", async (req, res) => {
-  try {
-    const { name, id, email, verificationid, verificationkey } = req.body;
-    const mailOptions = {
-      from: process.env.GMAIL_USER,
-      to: email,
-      subject: "Confirm Your Email",
-      html: `<div style="background-color:#F8FAFC;padding:32px">
-                <div style="background-color:#FFFFFF;border-radius:16px;padding:32px;text-align:center">
-                  <h2 style="font-size:28px;font-weight:bold;margin:0 0 16px">Confirmation Email</h2>
-                  <p style="font-size:16px;margin-bottom:16px">Hello ${name},</p>
-                  <p style="font-size:16px;margin-bottom:16px">Thank you for signing up! Please confirm your email by clicking the link below:</p>
-                  <a href="${process.env.BASE_URL}/confirmemail?u=${id}&k=${verificationkey}&v=${verificationid}" style="font-size:16px;color:#007BFF;text-decoration:none">Confirm Email</a>
-                </div>
-              </div>
-              `,
-    };
-
-    try {
-      await transporter.sendMail(mailOptions);
-      console.log(`Confirmation email sent to ${email}`);
-    } catch (error) {
-      if (error.message.includes("Invalid recipient")) {
-        console.log(`Wrong email address: ${email}`);
-      } else {
-        return res.status(201).json({
-          message: "confirmation email not sent",
-          status: 201,
-          meaning: "created",
-        });
-      }
-    }
-
-    return res.status(201).json({
-      message: "confirmation email sent successfully",
-      status: 201,
-      meaning: "created",
-    });
-  } catch (error) {
-    return res.status(501).json({
-      message: error.message,
-      status: 501,
-      meaning: "internalerror",
-    });
-  }
-});
-
 router.get("/addusertotest", async (req, res) => {
   const userid = req.query.userid;
-  console.log("🚀 ~ file: userroute.js:90 ~ router.get ~ userid:", userid)
+  console.log("🚀 ~ file: userroute.js:90 ~ router.get ~ userid:", userid);
   const dateid = createTodayDateId();
   const test = await DailyTest.findOne({
     dateid: dateid,
@@ -116,7 +69,7 @@ router.get("/addusertotest", async (req, res) => {
 
 router.post("/addusertotest", async (req, res) => {
   const dateid = createTodayDateId();
-  const { userid, name, score } = req.body;
+  const { userid, name, score, email } = req.body;
   if (!userid) {
     return res.status(400).json({
       message: "no userid or name provided",
@@ -142,6 +95,41 @@ router.post("/addusertotest", async (req, res) => {
     totalscore: score,
   });
   const savedest = await test.save();
+
+
+  const subject = "Test Score";
+  const html =`<div style="background-color: #F8FAFC; padding: 32px;max-width:40rem;margin"0 auto;">
+  <div style="background-color: #FFFFFF; border-radius: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 32px; text-align: center;">
+    <img src="${LOGO_URL}" alt="Your Logo" style="max-width: 150px; margin-bottom: 16px;">
+    <h2 style="font-size: 28px; font-weight: bold; margin: 0 0 16px;">User Details</h2>
+    <p style="font-size: 18px; margin-bottom: 16px;">Hello ${name},</p>
+    <p style="font-size: 18px; margin-bottom: 16px;">Here are the user details:</p>
+    <div style="background-color: #E0E0E0; padding: 12px; border-radius: 8px; margin: 16px 0;">
+      <p style="font-size: 16px; margin: 0;"><strong>User ID:</strong> ${userid}</p>
+    </div>
+    <div style="background-color: #E0E0E0; padding: 12px; border-radius: 8px; margin: 16px 0;">
+      <p style="font-size: 16px; margin: 0;"><strong>Name:</strong> ${decodeURI(name)}</p>
+    </div>
+    <div style="background-color: #E0E0E0; padding: 12px; border-radius: 8px; margin: 16px 0;">
+      <p style="font-size: 16px; margin: 0;"><strong>Score:</strong> ${score}</p>
+    </div>
+    <div style="background-color: #3498db; color: #fff; padding: 10px; border-radius: 8px; margin: 16px 0;">
+      <p style="font-size: 16px; margin: 0;">Test ID: ${dateid}</p>
+    </div>
+    <div style="background-color: #2ecc71; color: #fff; padding: 10px; border-radius: 8px; margin: 16px 0;">
+      <p style="font-size: 16px; margin: 0;">Take tomorrow's test at 4 PM.</p>
+    </div>
+    <a href="${process.env.FRONTEND}/result" style="color: #3498db; text-decoration: none; font-size: 16px; margin: 16px 0; display: block;">View Leaderboard and Answers</a>
+    <p style="font-size: 18px; margin: 16px 0;">Thanks for attending the test. We encourage you to participate in other tests available in the Test section.</p>
+    <p style="font-size: 18px; margin: 16px 0;">If you encounter any problems, feel free to discuss them in the Discussion section. You can also seek help and guidance from the toppers of previous tests.</p>
+  </div>
+</div>
+
+`
+;
+  const send_email = await sendEmail(subject, email, html);
+  console.log("🚀 ~ file: userroute.js:117 ~ router.post ~ send_email:", send_email)
+
   return res.status(200).json({
     message: "saved user score",
     savedest,
