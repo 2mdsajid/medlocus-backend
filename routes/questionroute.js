@@ -294,6 +294,37 @@ router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
   }
 });
 
+router.post("/addexplanation", VerifyAdmin, async (req, res) => {
+  try {
+    const { explanation, questionid, difficulty, image } = req.body;
+    if (!questionid || !explanation) {
+      return res.status(400).json({
+        message: "Missing parameters",
+      });
+    }
+    const userid = req.user.id;
+    const question = await Question.findById(questionid);
+    if (!question) {
+      return res.status(404).json({
+        message: "Question not found",
+      });
+    }
+
+    question.explanation = explanation;
+    question.difficulty = difficulty[0] || 'm'
+    question.images.exp = image || ''
+    await question.save();
+    return res.status(200).json({
+      message: "Explanation saved successfully",
+      _id: question._id,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+
 router.post("/reportquestion", VerifyUser, async (req, res) => {
   try {
     const { message, questionid } = req.body;
