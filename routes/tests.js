@@ -162,6 +162,7 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
           explanation: 1,
           subject: 1,
           chapter: 1,
+          images: 1,
           _id: 1,
         },
       },
@@ -250,6 +251,7 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
             explanation: 1,
             subject: 1,
             chapter: 1,
+            images: 1,
             _id: 1,
           },
         },
@@ -285,7 +287,8 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
       .populate({
         path: "questions.question",
         model: Question,
-        select: "question options answer explanation subject chapter _id",
+        select:
+          "question options answer explanation subject chapter images _id",
       })
       .lean();
 
@@ -316,7 +319,7 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
 
 router.get("/createdailytest", async (req, res) => {
   try {
-    let finalquestions = [];
+    let questionsArray = [];
     const dateid = createTodayDateId();
 
     const existingdate = await DailyTest.findOne({
@@ -327,37 +330,46 @@ router.get("/createdailytest", async (req, res) => {
         message: "Daily Test Already exist",
       });
     }
-    for (const subject in UNITWEIGHTAGE) {
-      if (UNITWEIGHTAGE.hasOwnProperty(subject)) {
-        const subjectModel = getModelBasedOnSubject(subject);
-        const unitWeightage = UNITWEIGHTAGE[subject];
+    // Initialize a counter to keep track of how many questions have been fetched
+    let fetchedQuestionsCount = 0;
 
-        for (const mergedunit in unitWeightage) {
-          if (unitWeightage.hasOwnProperty(mergedunit)) {
-            const numberOfQuestions = unitWeightage[mergedunit];
+    // Iterate through the UNITWEIGHTAGE object
+    for (const category in UNITWEIGHTAGE) {
+      for (const unit in UNITWEIGHTAGE[category]) {
+        const weightage = UNITWEIGHTAGE[category][unit];
 
-            const randomQuestions = await subjectModel.aggregate([
-              { $match: { mergedunit: mergedunit } },
-              { $sample: { size: numberOfQuestions } },
-            ]);
-            finalquestions.push(...randomQuestions);
-          }
-        }
+        const questions = await Question.aggregate([
+          {
+            $match: {
+              mergedunit: unit,
+              'isverified.state': true,
+              'isadded.state': true,
+              'isreported.state': false,
+            },
+          },
+          { $sample: { size: weightage } },
+          {
+            $project: {
+              _id: 1,
+            },
+          },
+        ]).exec();
+
+        questionsArray.push(...questions);
+        questions.length === 0 && console.log(unit, questions.length)
       }
     }
-    const questionsArray = finalquestions.map((questionid) => {
-      return {
-        question: questionid.questionid,
-      };
-    });
+
     const dailytest = new DailyTest({
       dateid: dateid,
       questions: questionsArray,
     });
-    const savedtest = await dailytest.save();
+    await dailytest.save();
+
+    // const savedtest = await dailytest.save();
     return res.status(200).json({
       message: "Daily test created successfully",
-      savedtest: savedtest.questions.length,
+      dailytest: questionsArray.length,
     });
   } catch (error) {
     return res.status(500).json({
@@ -374,9 +386,9 @@ router.get("/invalidatedailytest", async (req, res) => {
         message: "No Test Found",
       });
     }
-    if(dailytest.archive === true){
+    if (dailytest.archive === true) {
       return res.status(500).json({
-        message: 'Test Already Archived',
+        message: "Test Already Archived",
       });
     }
     dailytest.archive = true;
@@ -436,3 +448,31 @@ router.get("/getdailytests", VerifyUser, async (req, res) => {
 });
 
 module.exports = router;
+
+// for (const subject in UNITWEIGHTAGE) {
+//   if (UNITWEIGHTAGE.hasOwnProperty(subject)) {
+//     const subjectModel = getModelBasedOnSubject(subject);
+//     const unitWeightage = UNITWEIGHTAGE[subject];
+
+//     for (const mergedunit in unitWeightage) {
+//       if (unitWeightage.hasOwnProperty(mergedunit)) {
+//         const numberOfQuestions = unitWeightage[mergedunit];
+
+//         const randomQuestions = await subjectModel.aggregate([
+//           { $match: { mergedunit: mergedunit } },
+//           { $sample: { size: numberOfQuestions } },
+//         ]);
+//         finalquestions.push(...randomQuestions);
+//       }
+//     }
+//   }
+// }
+// const questionsArray = finalquestions.map((questionid) => {
+//   return {
+//     question: questionid.questionid,
+//   };
+// });
+// const dailytest = new DailyTest({
+//   dateid: dateid,
+//   questions: questionsArray,
+// });

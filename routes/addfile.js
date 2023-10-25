@@ -40,6 +40,10 @@ const getModelBasedOnSubject = (subject) => {
 };
 
 const answersValues = ["a", "b", "c", "d"];
+const yearPattern = /\s*\[\d{4}\]/g;
+function removeYearPattern(str) {
+  return str.replace(yearPattern, '');
+}
 
 const assignTopic = async (questions, topic, subject) => {
   try {
@@ -61,13 +65,21 @@ const assignUnit = async (questions, addedby, mergedunit, sub) => {
         question.mergedunit = mergedunit;
         const currentDate = new Date(); // Get the current date and time
         assignedUnits.push({
-          question: question.qn,
+          question: removeYearPattern(question.qn),
           options: question.options,
           answer: question.ans,
           subject: question.sub,
           chapter: question.topic,
           mergedunit: question.mergedunit,
           explanation: question.explanation,
+          images: question.images || {
+            qn: "",
+            a: "",
+            b: "",
+            c: "",
+            d: "",
+            exp: "",
+          },
           difficulty: question.difficulty ? question.difficulty[0] : "m",
           isadded: {
             state: true,
@@ -124,6 +136,69 @@ const checkCompatibility = (question) => {
 };
 
 router.post(
+  "/uploadjsondata",
+  upload.single("jsonFile"),
+  VerifyAdmin,
+  async (req, res) => {
+    const jsonData = JSON.parse(req.body.jsondata);
+    const subject = req.body.subject;
+    const mergedunit = req.body.unit;
+    const topic = req.body.chapter;
+    const addedby = req.user.uuid;
+
+    const incompatibleQuestions = await jsonData.filter(
+      (question) => !checkCompatibility(question)
+    );
+    if (incompatibleQuestions.length > 0) {
+      return res.status(400).json({
+        message: `${incompatibleQuestions.length} Incompatible questions found. Please refer the docs fro compatibility`,
+      });
+    }
+    const assignedTopics = await assignTopic(jsonData, topic, subject);
+    const assignedUnits = await assignUnit(
+      assignedTopics,
+      addedby,
+      mergedunit,
+      subject
+    );
+    const newQuestions = await Question.insertMany(assignedUnits);
+    const questionsBySubject = {};
+    newQuestions.forEach((question) => {
+      const subject = question.subject;
+      if (!questionsBySubject[subject]) {
+        questionsBySubject[subject] = [];
+      }
+      questionsBySubject[subject].push({
+        mergedunit: question.mergedunit,
+        chapter: question.chapter,
+        questionid: question._id,
+      });
+    });
+
+    // Iterate through the subject models and insert the grouped questions
+    const SubjectModels = [...new Set(newQuestions.map((q) => q.subject))];
+    for (const model of SubjectModels) {
+      const SubjectModel = getModelBasedOnSubject(model);
+      const subjectQuestions = questionsBySubject[model];
+      if (subjectQuestions && subjectQuestions.length > 0) {
+        await SubjectModel.insertMany(subjectQuestions);
+        console.log(
+          ` ${model} - ${assignedUnits.length} questions inserted successfully.`
+        );
+      }
+    }
+
+    const admin = await Admin.findOne({ uuid: newQuestions[0].isadded.by });
+    admin.questions = admin.questions + assignedUnits.length;
+    await admin.save();
+
+    res.status(200).json({
+      message: ` ${subject} - ${topic} - ${mergedunit} - ${assignedUnits.length} questions - By ${req.user.name} --  added.`,
+    });
+  }
+);
+
+router.post(
   "/uploadjson",
   upload.single("jsonFile"),
   VerifyAdmin,
@@ -135,6 +210,7 @@ router.post(
     const subject = req.body.subject;
     const mergedunit = req.body.unit;
     const topic = req.body.chapter;
+    console.log(topic, mergedunit)
     const addedby = req.user.uuid;
     fs.readFile(req.file.path, "utf8", async (err, data) => {
       if (err) {

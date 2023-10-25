@@ -41,7 +41,6 @@ const createTodayDateId = () => {
 
 router.get("/addusertotest", async (req, res) => {
   const userid = req.query.userid;
-  console.log("🚀 ~ file: userroute.js:90 ~ router.get ~ userid:", userid);
   const dateid = createTodayDateId();
   const test = await DailyTest.findOne({
     dateid: dateid,
@@ -96,7 +95,6 @@ router.post("/addusertotest", async (req, res) => {
   });
   const savedest = await test.save();
 
-
   const subject = "Test Score";
   const html =`<div style="background-color: #F8FAFC; padding: 32px;max-width:40rem;margin"0 auto;">
   <div style="background-color: #FFFFFF; border-radius: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 32px; text-align: center;">
@@ -128,8 +126,6 @@ router.post("/addusertotest", async (req, res) => {
 `
 ;
   const send_email = await sendEmail(subject, email, html);
-  console.log("🚀 ~ file: userroute.js:117 ~ router.post ~ send_email:", send_email)
-
   return res.status(200).json({
     message: "saved user score",
     savedest,
