@@ -244,7 +244,7 @@ router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
   const num = req.query.n;
   const type = req.query.t;
   const sub = req.query.sub;
-  if (t === "subject" && !sub) {
+  if (type === "subject" && !sub) {
     return res.status(400).json({
       message: "Missing parameter: subject",
     });
