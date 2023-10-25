@@ -243,6 +243,12 @@ router.get("/getreviewquestions", VerifyUser, async (req, res) => {
 router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
   const num = req.query.n;
   const type = req.query.t;
+  const sub = req.query.sub;
+  if (t === "subject" && !sub) {
+    return res.status(400).json({
+      message: "Missing parameter: subject",
+    });
+  }
   if (!req.query.n) {
     return res.status(400).json({
       message: "Missing parameter: number of questions",
@@ -260,6 +266,15 @@ router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
     } else if (type === "added") {
       questions = await Question.aggregate([
         { $match: { "isadded.state": false } },
+        { $sample: { size: Number(num) } },
+      ]).exec();
+    } else if (type === "subject") {
+      questions = await Question.aggregate([
+        {
+          $match: {
+            subject: sub,
+          },
+        },
         { $sample: { size: Number(num) } },
       ]).exec();
     } else {
@@ -311,8 +326,8 @@ router.post("/addexplanation", VerifyAdmin, async (req, res) => {
     }
 
     question.explanation = explanation;
-    question.difficulty = difficulty[0] || 'm'
-    question.images.exp = image || ''
+    question.difficulty = difficulty[0] || "m";
+    question.images.exp = image || "";
     await question.save();
     return res.status(200).json({
       message: "Explanation saved successfully",
@@ -520,4 +535,3 @@ router.post("/getqnsbyid", VerifyUser, async (req, res) => {
 });
 
 module.exports = router;
-
