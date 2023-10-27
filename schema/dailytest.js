@@ -1,10 +1,27 @@
 const mongoose = require("mongoose");
 
 const dailytest = mongoose.Schema({
+  type: {
+    type: String,
+    enum: ["daily", "weekly", "sponsored"],
+    required: true,
+    default: "daily",
+  },
+  isSponsored: {
+    state: {
+      type: Boolean,
+      default: false,
+    },
+    by: {
+      type: String,
+    },
+    image: {
+      type: String,
+    },
+  },
   dateid: {
     type: String,
     required: true,
-    unique: true,
   },
   questions: [
     {

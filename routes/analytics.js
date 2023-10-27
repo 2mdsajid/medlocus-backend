@@ -92,6 +92,9 @@ router.get("/analytics", async (req, res) => {
           count: { $sum: 1 },
         },
       },
+      {
+        $sort: { _id: 1 }, // Sort in ascending order by date
+      },
     ]);
 
     // Transform the questionsByDateAdded data into the desired format
@@ -111,9 +114,6 @@ router.get("/analytics", async (req, res) => {
         "Number Of Questions": admin.questions,
       });
     });
-
-    console.log("🚀 ~ file: analytics.js:109 ~ router.get ~ admins:", modifiedadmins);
-
     res.status(200).json({
       totalQuestions,
       verifiedQuestions,
