@@ -47,6 +47,31 @@ const getModelBasedOnSubject = (subject) => {
   return SubjectModel;
 };
 
+function cosineSimilarity(sentence1, sentence2) {
+  const words1 = sentence1.split(" ");
+  const words2 = sentence2.split(" ");
+  const uniqueWords = new Set([...words1, ...words2]);
+  const vector1 = Array.from(uniqueWords).map((word) =>
+    words1.includes(word) ? 1 : 0
+  );
+  const vector2 = Array.from(uniqueWords).map((word) =>
+    words2.includes(word) ? 1 : 0
+  );
+  const dotProduct = vector1.reduce(
+    (accumulator, value, index) => accumulator + value * vector2[index],
+    0
+  );
+  const magnitude1 = Math.sqrt(
+    vector1.reduce((acc, value) => acc + value * value, 0)
+  );
+  const magnitude2 = Math.sqrt(
+    vector2.reduce((acc, value) => acc + value * value, 0)
+  );
+  const similarity = dotProduct / (magnitude1 * magnitude2);
+
+  return similarity;
+}
+
 router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
   try {
     const reviewtype = req.query.reviewtype;
@@ -139,69 +164,105 @@ router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
   }
 });
 
-router.post("/savequestion", VerifyUser,newquestionlimiter, async (req, res) => {
-  try {
-    const {
-      question,
-      options,
-      answer,
-      explanation,
-      subject,
-      chapter,
-      mergedunit,
-      ispast,
-      difficulty,
-      isadded,
-      isverified,
-      images,
-    } = req.body.questionElement;
+router.post(
+  "/savequestion",
+  VerifyUser,
+  newquestionlimiter,
+  async (req, res) => {
+    try {
+      const {
+        question,
+        options,
+        answer,
+        explanation,
+        subject,
+        chapter,
+        mergedunit,
+        ispast,
+        difficulty,
+        isadded,
+        isverified,
+        images,
+      } = req.body.questionElement;
 
-    const existingQuestion = new Question({
-      question,
-      options,
-      answer,
-      explanation,
-      subject,
-      chapter,
-      mergedunit,
-      ispast,
-      difficulty,
-      isadded,
-      isverified,
-      images,
-    });
+      // matching for existing question
+      const questions = await Question.aggregate([
+        {
+          $match: {
+            subject: subject,
+            mergedunit: mergedunit,
+            chapter: chapter,
+          },
+        },
+      ]).exec();
 
-    const savedQuestion = await existingQuestion.save();
-    const SubjectModel = getModelBasedOnSubject(subject);
-    const questioninmodelnew = await SubjectModel.findOne({
-      questionid: savedQuestion._id,
-      chapter: savedQuestion.chapter,
-      mergedunit: savedQuestion.mergedunit,
-    });
+      const threshold = 0.3; // Define the threshold (30%)
 
-    if (!questioninmodelnew) {
-      const newSubjectEntry = new SubjectModel({
+      const matchingQuestions = questions.map((question) => {
+        const similarity = cosineSimilarity(
+          req.body.questionElement.question,
+          question.question
+        );
+        return { question, similarity };
+      });
+
+      matchingQuestions.sort((a, b) => b.similarity - a.similarity);
+      if (
+        matchingQuestions.length > 0 &&
+        matchingQuestions[0].similarity > threshold
+      ) {
+        return res.status(400).json({
+          message: "Question too similar to one of our existing questions",
+        });
+      }
+
+      const existingQuestion = new Question({
+        question,
+        options,
+        answer,
+        explanation,
+        subject,
+        chapter,
+        mergedunit,
+        ispast,
+        difficulty,
+        isadded,
+        isverified,
+        images,
+      });
+
+      const savedQuestion = await existingQuestion.save();
+      const SubjectModel = getModelBasedOnSubject(subject);
+      const questioninmodelnew = await SubjectModel.findOne({
         questionid: savedQuestion._id,
         chapter: savedQuestion.chapter,
         mergedunit: savedQuestion.mergedunit,
       });
-      await newSubjectEntry.save();
-    }
 
-    const elem = {
-      questionid: savedQuestion._id,
-      userid: savedQuestion.isadded.by,
-    };
-    return res.status(200).json({
-      message: "question added successfully",
-      elem,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: error.message,
-    });
+      if (!questioninmodelnew) {
+        const newSubjectEntry = new SubjectModel({
+          questionid: savedQuestion._id,
+          chapter: savedQuestion.chapter,
+          mergedunit: savedQuestion.mergedunit,
+        });
+        await newSubjectEntry.save();
+      }
+
+      const elem = {
+        questionid: savedQuestion._id,
+        userid: savedQuestion.isadded.by,
+      };
+      return res.status(200).json({
+        message: "question added successfully",
+        elem,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        message: error.message,
+      });
+    }
   }
-});
+);
 
 router.get("/getreviewquestions", VerifyUser, async (req, res) => {
   try {
@@ -535,4 +596,5 @@ router.post("/getqnsbyid", VerifyUser, async (req, res) => {
   }
 });
 
+module.cosineSimilarity = cosineSimilarity;
 module.exports = router;
