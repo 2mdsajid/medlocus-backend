@@ -19,6 +19,7 @@ const Mat = require("../schema/mat");
 const DailyTest = require("../schema/dailytest");
 
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
+const { newquestionlimiter } = require("../middlewares/limiter");
 
 const getModelBasedOnSubject = (subject) => {
   let SubjectModel;
@@ -138,7 +139,7 @@ router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
   }
 });
 
-router.post("/savequestion", VerifyUser, async (req, res) => {
+router.post("/savequestion", VerifyUser,newquestionlimiter, async (req, res) => {
   try {
     const {
       question,

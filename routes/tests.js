@@ -16,6 +16,7 @@ const Physics = require("../schema/physics");
 const Chemistry = require("../schema/chemistry");
 const Mat = require("../schema/mat");
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
+const { limitermiddleware } = require("../middlewares/limiter");
 
 const createTodayDateId = () => {
   const currentDate = new Date();
@@ -63,7 +64,7 @@ const groupQuestionsBySubject = async (questions) => {
   return questionarray;
 };
 
-router.get("/testquestions/:typeoftest", async (req, res) => {
+router.get("/testquestions/:typeoftest",limitermiddleware, async (req, res) => {
   const { model, num, sub, chap, unit } = req.query;
   const { typeoftest } = req.params;
   const numberofquestions = parseInt(num);
@@ -83,6 +84,17 @@ router.get("/testquestions/:typeoftest", async (req, res) => {
   }
 
   if (["chapterwise", "unitwise", "subjectwise"].includes(typeoftest)) {
+    if (numberofquestions>30) {
+      return res.status(400).json({
+        message: "Number of questions can't be more than 30",
+      });
+    }
+    if (numberofquestions<5) {
+      return res.status(400).json({
+        message: "Number of questions can't be less",
+      });
+    }
+
     if (!sub || !(sub in SUBJECTWEIGHTAGE)) {
       return res.status(400).json({
         message: "Invalid or missing subject",
