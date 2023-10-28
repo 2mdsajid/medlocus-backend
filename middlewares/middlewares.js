@@ -23,7 +23,7 @@ const VerifyAdmin = async (req, res, next) => {
         return res.status(403).json({ message: "Access forbidden for non-admin users" });
       }
 
-      if (user.role !== 'admin') {
+      if (!['admin','sajid','superadmin'].includes(user.role)) {
           return res.status(403).json({ message: "Access forbidden for non-admin users" });
       }
 
