@@ -64,236 +64,136 @@ const groupQuestionsBySubject = async (questions) => {
   return questionarray;
 };
 
-router.get("/testquestions/:typeoftest",limitermiddleware, async (req, res) => {
-  const { model, num, sub, chap, unit } = req.query;
-  const { typeoftest } = req.params;
-  const numberofquestions = parseInt(num);
-  const TEST_TYPES = [
-    "chapterwise",
-    "unitwise",
-    "subjectwise",
-    "modeltest",
-    "dailytest",
-    "weeklytest",
-  ];
+router.get(
+  "/testquestions/:typeoftest",
+  limitermiddleware,
+  async (req, res) => {
+    const { model, num, sub, chap, unit } = req.query;
+    const { typeoftest } = req.params;
+    const numberofquestions = parseInt(num);
+    const TEST_TYPES = [
+      "chapterwise",
+      "unitwise",
+      "subjectwise",
+      "modeltest",
+      "dailytest",
+      "weeklytest",
+    ];
 
-  if (!TEST_TYPES.includes(typeoftest)) {
-    return res.status(400).json({
-      message: "Missing some parameters - type",
-    });
-  }
-
-  if (["chapterwise", "unitwise", "subjectwise"].includes(typeoftest)) {
-    if (numberofquestions>30) {
+    if (!TEST_TYPES.includes(typeoftest)) {
       return res.status(400).json({
-        message: "Number of questions can't be more than 30",
-      });
-    }
-    if (numberofquestions<5) {
-      return res.status(400).json({
-        message: "Number of questions can't be less",
+        message: "Missing some parameters - type",
       });
     }
 
-    if (!sub || !(sub in SUBJECTWEIGHTAGE)) {
-      return res.status(400).json({
-        message: "Invalid or missing subject",
-      });
-    }
-
-    if (typeoftest === "unitwise" || typeoftest === "chapterwise") {
-      if (!unit || !(unit in UNITWEIGHTAGE[sub])) {
+    if (["chapterwise", "unitwise", "subjectwise"].includes(typeoftest)) {
+      if (numberofquestions > 30) {
         return res.status(400).json({
-          message: "Invalid or missing unit",
+          message: "Number of questions can't be more than 30",
+        });
+      }
+      if (numberofquestions < 5) {
+        return res.status(400).json({
+          message: "Number of questions can't be less",
+        });
+      }
+
+      if (!sub || !(sub in SUBJECTWEIGHTAGE)) {
+        return res.status(400).json({
+          message: "Invalid or missing subject",
+        });
+      }
+
+      if (typeoftest === "unitwise" || typeoftest === "chapterwise") {
+        if (!unit || !(unit in UNITWEIGHTAGE[sub])) {
+          return res.status(400).json({
+            message: "Invalid or missing unit",
+          });
+        }
+      }
+
+      if (typeoftest === "chapterwise") {
+        const units = UPDATED_SYLLABUS.subjects
+          .find((s) => s.name === sub)
+          .units.find((s) => s.mergedunit === unit);
+        // make sure to revise the chapter
+        // chapter coming with ( ) replaced by (-)
+        // syllabus has ( ) & database has (-)
+        // so matching from the syllabus removing the (-) with ( )
+        if (!chap || !units.topics.includes(chap.replace(/-/g, " "))) {
+          return res.status(400).json({
+            message: "Invalid or missing chapter",
+          });
+        }
+      }
+
+      if (
+        !numberofquestions ||
+        numberofquestions > 50 ||
+        numberofquestions < 5
+      ) {
+        return res.status(400).json({
+          message: "Number of questions must be in range 5 - 50",
         });
       }
     }
 
-    if (typeoftest === "chapterwise") {
-      const units = UPDATED_SYLLABUS.subjects
-        .find((s) => s.name === sub)
-        .units.find((s) => s.mergedunit === unit);
-      // make sure to revise the chapter
-      // chapter coming with ( ) replaced by (-)
-      // syllabus has ( ) & database has (-)
-      // so matching from the syllabus removing the (-) with ( )
-      if (!chap || !units.topics.includes(chap.replace(/-/g, " "))) {
-        return res.status(400).json({
-          message: "Invalid or missing chapter",
-        });
-      }
-    }
-
-    if (!numberofquestions || numberofquestions > 50 || numberofquestions < 5) {
-      return res.status(400).json({
-        message: "Number of questions must be in range 5 - 50",
-      });
-    }
-  }
-
-  // /* SUBJECTWISE TEST ----------------------------------------- */
-  if (typeoftest === "subjectwise") {
-    const questions = await Question.aggregate([
-      {
-        $match: {
-          subject: sub,
-          "isverified.state": true,
-          "isadded.state": true,
-          "isreported.state": false,
-          "isflagged.state": false,
-        },
-      },
-      { $sample: { size: numberofquestions } },
-      {
-        $project: {
-          question: 1,
-          options: 1,
-          answer: 1,
-          explanation: 1,
-          subject: 1,
-          chapter: 1,
-          _id: 1,
-        },
-      },
-      {
-        $set: {
-          uans: "",
-          timetaken: 0,
-        },
-      },
-    ]).exec();
-    if (questions.length < 0) {
-      return res.status(400).json({
-        message: "no questions from this subject",
-      });
-    }
-    const groupedQuestions = await groupQuestionsBySubject(questions);
-    return res.status(200).json({
-      message: "Chapter questions founddddd",
-      questions: groupedQuestions,
-    });
-  }
-  ///* UNIT WISE */-------------------------------
-  else if (typeoftest === "unitwise") {
-    const questions = await Question.aggregate([
-      {
-        $match: {
-          subject: sub,
-          mergedunit: unit,
-          "isverified.state": true,
-          "isadded.state": true,
-          "isreported.state": false,
-          "isflagged.state": false,
-        },
-      },
-      { $sample: { size: numberofquestions } },
-      {
-        $project: {
-          question: 1,
-          options: 1,
-          answer: 1,
-          explanation: 1,
-          subject: 1,
-          chapter: 1,
-          images: 1,
-          _id: 1,
-        },
-      },
-      {
-        $set: {
-          uans: "",
-          timetaken: 0,
-        },
-      },
-    ]).exec();
-    if (questions.length === 0) {
-      return res.status(400).json({
-        message: "No questions found",
-      });
-    }
-    const groupedQuestions = await groupQuestionsBySubject(questions);
-    return res.status(200).json({
-      message: "unit questions founddddd",
-      questions: groupedQuestions,
-    });
-  }
-  // /* CHAPTERWISE------------------------------------------------------ */
-  else if (typeoftest === "chapterwise") {
-    const questions = await Question.aggregate([
-      {
-        $match: {
-          subject: sub,
-          mergedunit: unit,
-          chapter: chap,
-          "isverified.state": true,
-          "isadded.state": true,
-          "isreported.state": false,
-          "isflagged.state": false,
-        },
-      },
-      { $sample: { size: numberofquestions } },
-      {
-        $project: {
-          question: 1,
-          options: 1,
-          answer: 1,
-          explanation: 1,
-          subject: 1,
-          chapter: 1,
-          images: 1,
-          _id: 1,
-        },
-      },
-      {
-        $set: {
-          uans: "",
-          timetaken: 0,
-        },
-      },
-    ]).exec();
-    if (questions.length === 0) {
-      return res.status(400).json({
-        message: "No questions found",
-      });
-    }
-    const groupedQuestions = await groupQuestionsBySubject(questions);
-    return res.status(200).json({
-      message: "unit questions founddddd",
-      questions: groupedQuestions,
-    });
-  }
-  // /* MODEL TEST ---------------------------------- */
-  else if (typeoftest === "modeltest") {
-    if (![50, 100, 150, 200].includes(numberofquestions)) {
-      return res.status(400).json({
-        message: "number of questions not matched or unusual",
-        status: 300,
-      });
-    }
-    const fraction = numberofquestions / 200;
-    const subjectKeys = Object.keys(SUBJECTWEIGHTAGE);
-    const questions = [];
-
-    for (const subject of subjectKeys) {
-      const SubjectModel = getModelBasedOnSubject(subject);
-      const numberOfQuestions = Math.ceil(SUBJECTWEIGHTAGE[subject] * fraction);
-      const totalQuestionsInModel = await SubjectModel.countDocuments();
-
-      const questionsToFetch = Math.min(
-        numberOfQuestions,
-        totalQuestionsInModel
-      );
-      const selectedquestions = await Question.aggregate([
+    // /* SUBJECTWISE TEST ----------------------------------------- */
+    if (typeoftest === "subjectwise") {
+      const questions = await Question.aggregate([
         {
           $match: {
-            subject: subject,
+            subject: sub,
             "isverified.state": true,
             "isadded.state": true,
             "isreported.state": false,
             "isflagged.state": false,
           },
         },
-        { $sample: { size: questionsToFetch } },
+        { $sample: { size: numberofquestions } },
+        {
+          $project: {
+            question: 1,
+            options: 1,
+            answer: 1,
+            explanation: 1,
+            subject: 1,
+            chapter: 1,
+            _id: 1,
+          },
+        },
+        {
+          $set: {
+            uans: "",
+            timetaken: 0,
+          },
+        },
+      ]).exec();
+      if (questions.length < 0) {
+        return res.status(400).json({
+          message: "no questions from this subject",
+        });
+      }
+      const groupedQuestions = await groupQuestionsBySubject(questions);
+      return res.status(200).json({
+        message: "Chapter questions founddddd",
+        questions: groupedQuestions,
+      });
+    }
+    ///* UNIT WISE */-------------------------------
+    else if (typeoftest === "unitwise") {
+      const questions = await Question.aggregate([
+        {
+          $match: {
+            subject: sub,
+            mergedunit: unit,
+            "isverified.state": true,
+            "isadded.state": true,
+            "isreported.state": false,
+            "isflagged.state": false,
+          },
+        },
+        { $sample: { size: numberofquestions } },
         {
           $project: {
             question: 1,
@@ -313,60 +213,169 @@ router.get("/testquestions/:typeoftest",limitermiddleware, async (req, res) => {
           },
         },
       ]).exec();
-
-      // const questionIds = populatedQuestions.map((item) => item.questionid);
-      questions.push(...selectedquestions);
-    }
-
-    if (questions.length > numberofquestions) {
-      questions.pop();
-    }
-
-    const groupedQuestions = await groupQuestionsBySubject(questions);
-    return res.status(200).json({
-      message: "model questions found",
-      questions: groupedQuestions,
-    });
-  }
-  // /* DAILY TEST---------------------------- */
-  else if (typeoftest === "dailytest") {
-    const dateid = createTodayDateId();
-    const testquestions = await DailyTest.findOne({
-      dateid: dateid,
-      archive: false,
-    })
-      .populate({
-        path: "questions.question",
-        model: Question,
-        select:
-          "question options answer explanation subject chapter images _id",
-      })
-      .lean();
-
-    if (!testquestions) {
-      return res.status(404).json({
-        message: "Daily test not found",
+      if (questions.length === 0) {
+        return res.status(400).json({
+          message: "No questions found",
+        });
+      }
+      const groupedQuestions = await groupQuestionsBySubject(questions);
+      return res.status(200).json({
+        message: "unit questions founddddd",
+        questions: groupedQuestions,
       });
     }
-    const questions = await testquestions.questions.map((question) => {
-      return question.question;
-    });
-    const modifiedquestions = await questions.map((question) => ({
-      ...question,
-      uans: "",
-      timetaken: 0,
-    }));
+    // /* CHAPTERWISE------------------------------------------------------ */
+    else if (typeoftest === "chapterwise") {
+      const questions = await Question.aggregate([
+        {
+          $match: {
+            subject: sub,
+            mergedunit: unit,
+            chapter: chap,
+            "isverified.state": true,
+            "isadded.state": true,
+            "isreported.state": false,
+            "isflagged.state": false,
+          },
+        },
+        { $sample: { size: numberofquestions } },
+        {
+          $project: {
+            question: 1,
+            options: 1,
+            answer: 1,
+            explanation: 1,
+            subject: 1,
+            chapter: 1,
+            images: 1,
+            _id: 1,
+          },
+        },
+        {
+          $set: {
+            uans: "",
+            timetaken: 0,
+          },
+        },
+      ]).exec();
+      if (questions.length === 0) {
+        return res.status(400).json({
+          message: "No questions found",
+        });
+      }
+      const groupedQuestions = await groupQuestionsBySubject(questions);
+      return res.status(200).json({
+        message: "unit questions founddddd",
+        questions: groupedQuestions,
+      });
+    }
+    // /* MODEL TEST ---------------------------------- */
+    else if (typeoftest === "modeltest") {
+      if (![50, 100, 150, 200].includes(numberofquestions)) {
+        return res.status(400).json({
+          message: "number of questions not matched or unusual",
+          status: 300,
+        });
+      }
+      const fraction = numberofquestions / 200;
+      const subjectKeys = Object.keys(SUBJECTWEIGHTAGE);
+      const questions = [];
 
-    const groupedQuestions = await groupQuestionsBySubject(modifiedquestions);
-    return res.status(200).json({
-      message: "Daily test retrieved successfully",
-      questions: groupedQuestions,
+      for (const subject of subjectKeys) {
+        const SubjectModel = getModelBasedOnSubject(subject);
+        const numberOfQuestions = Math.ceil(
+          SUBJECTWEIGHTAGE[subject] * fraction
+        );
+        const totalQuestionsInModel = await SubjectModel.countDocuments();
+
+        const questionsToFetch = Math.min(
+          numberOfQuestions,
+          totalQuestionsInModel
+        );
+        const selectedquestions = await Question.aggregate([
+          {
+            $match: {
+              subject: subject,
+              "isverified.state": true,
+              "isadded.state": true,
+              "isreported.state": false,
+              "isflagged.state": false,
+            },
+          },
+          { $sample: { size: questionsToFetch } },
+          {
+            $project: {
+              question: 1,
+              options: 1,
+              answer: 1,
+              explanation: 1,
+              subject: 1,
+              chapter: 1,
+              images: 1,
+              _id: 1,
+            },
+          },
+          {
+            $set: {
+              uans: "",
+              timetaken: 0,
+            },
+          },
+        ]).exec();
+
+        // const questionIds = populatedQuestions.map((item) => item.questionid);
+        questions.push(...selectedquestions);
+      }
+
+      if (questions.length > numberofquestions) {
+        questions.pop();
+      }
+
+      const groupedQuestions = await groupQuestionsBySubject(questions);
+      return res.status(200).json({
+        message: "model questions found",
+        questions: groupedQuestions,
+      });
+    }
+    // /* DAILY TEST---------------------------- */
+    else if (typeoftest === "dailytest") {
+      const dateid = createTodayDateId();
+      const testquestions = await DailyTest.findOne({
+        type: "daily",
+        dateid: dateid,
+        archive: false,
+      })
+        .populate({
+          path: "questions.question",
+          model: Question,
+          select:
+            "question options answer explanation subject chapter images _id",
+        })
+        .lean();
+      if (!testquestions) {
+        return res.status(404).json({
+          message: "Daily test not found",
+        });
+      }
+      const questions = await testquestions.questions.map((question) => {
+        return question.question;
+      });
+      const modifiedquestions = await questions.map((question) => ({
+        ...question,
+        uans: "",
+        timetaken: 0,
+      }));
+      const groupedQuestions = await groupQuestionsBySubject(modifiedquestions);
+      return res.status(200).json({
+        message: "Daily test retrieved successfully",
+        questions: groupedQuestions,
+      });
+    }
+    return res.status(404).json({
+      message: "Type of test not found",
     });
   }
-  return res.status(404).json({
-    message: "Type of test not found",
-  });
-});
+);
 
 router.get("/createdailytest", async (req, res) => {
   try {
@@ -378,17 +387,16 @@ router.get("/createdailytest", async (req, res) => {
     }
     let questionsArray = [];
     const dateid = createTodayDateId();
-
-    if (t === "daily") {
-      const existingdate = await DailyTest.findOne({
-        dateid: dateid,
-      });
-      if (existingdate) {
-        return res.status(301).json({
-          message: "Daily Test Already exist",
-        });
-      }
-    }
+    // if (t === "daily") {
+    //   const existingdate = await DailyTest.findOne({
+    //     dateid: dateid,
+    //   });
+    //   if (existingdate) {
+    //     return res.status(301).json({
+    //       message: "Daily Test Already exist",
+    //     });
+    //   }
+    // }
     // Initialize a counter to keep track of how many questions have been fetched
     let fetchedQuestionsCount = 0;
 
@@ -414,22 +422,29 @@ router.get("/createdailytest", async (req, res) => {
             },
           },
         ]).exec();
-
         questionsArray.push(...questions);
         questions.length === 0 && console.log(unit, questions.length);
       }
     }
 
+    const newArray = [];
+    questionsArray.forEach((questionId, index) => {
+      newArray.push({
+        question: questionId,
+      });
+    });
+    
+    console.log("🚀 ~ file: tests.js:431 ~ router.get ~ newArray:", newArray)
     const dailytest = new DailyTest({
       dateid: dateid,
-      questions: questionsArray,
+      questions: newArray,
     });
     await dailytest.save();
 
     // const savedtest = await dailytest.save();
     return res.status(200).json({
       message: "Daily test created successfully",
-      dailytest: questionsArray.length,
+      dailytest: newArray.length,
     });
   } catch (error) {
     return res.status(500).json({
