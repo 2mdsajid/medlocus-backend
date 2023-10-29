@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const dailytest = mongoose.Schema({
   type: {
     type: String,
-    enum: ["daily", "weekly", "sponsored","sujectwiseseries"],
+    enum: ["dailytest", "weeklytest", "sponsored","sujectwiseseries"],
     required: true,
     default: "daily",
   },
