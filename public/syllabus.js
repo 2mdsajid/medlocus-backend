@@ -523,8 +523,32 @@ const UPDATED_SYLLABUS = {
   ],
 };
 
+const data_series_subjectwise = {
+  "2023-10-29": {
+    subject: "zoology",
+    marks: "40",
+  },
+  "2023-10-30": {
+    subject: "botany",
+    marks: "40",
+  },
+  "2023-10-31": {
+    subject: "physics",
+    marks: "50",
+  },
+  "2023-11-01": {
+    subject: "chemistry",
+    marks: "50",
+  },
+  "2023-11-02": {
+    subject: "mat",
+    marks: "20",
+  },
+};
+
 module.exports = {
   SUBJECTWEIGHTAGE,
   UNITWEIGHTAGE,
   UPDATED_SYLLABUS,
+  data_series_subjectwise,
 };

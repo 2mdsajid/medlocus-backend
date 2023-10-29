@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const dailytest = mongoose.Schema({
+const specialseries = mongoose.Schema({
   type: {
     type: String,
     enum: ["daily", "weekly", "sponsored","sujectwiseseries"],
@@ -23,14 +23,7 @@ const dailytest = mongoose.Schema({
     type: String,
     required: true,
   },
-  questions: [
-    {
-      question: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Question",
-      },
-    },
-  ],
+  questions: {},
   archive: {
     type: Boolean,
     default: false,
@@ -58,6 +51,6 @@ const dailytest = mongoose.Schema({
   },
 });
 
-const DailyTest = mongoose.model("dailytest", dailytest);
+const SpecialSeries = mongoose.model("specialseries", specialseries);
 
-module.exports = DailyTest;
+module.exports = SpecialSeries;

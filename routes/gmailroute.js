@@ -15,6 +15,7 @@ const LOGO_URL =
   "https://res.cloudinary.com/dww0rxb4q/image/upload/v1697909046/isdru9pwcz1pixsnsgx9.png";
 
 const sendEmail = (subject, email, html) => {
+  if (!email) return;
   const mailOptions = {
     from: process.env.GMAIL_USER,
     to: email,
@@ -82,7 +83,7 @@ router.post("/sendwelcomemail", async (req, res) => {
   }
 });
 
-module.exports = router
+module.exports = router;
 module.exports.sendEmail = sendEmail;
 module.exports.LOGO_URL = LOGO_URL;
 
