@@ -344,7 +344,7 @@ router.get(
     else if (typeoftest === "dailytest") {
       const dateid = createTodayDateId();
       const testquestions = await DailyTest.findOne({
-        type: "daily",
+        type: "dailytest",
         dateid: dateid,
         archive: false,
       })
@@ -630,8 +630,6 @@ router.get("/invalidatedailytest", async (req, res) => {
 router.get("/getdailytests", VerifyUser, async (req, res) => {
   try {
     const { id, t } = req.query;
-    console.log("🚀 ~ file: tests.js:633 ~ router.get ~ t:", t);
-    console.log("🚀 ~ file: tests.js:633 ~ router.get ~ id:", id);
     if (id) {
       let dailytest;
       if (t === "sujectwiseseries") {
@@ -680,10 +678,6 @@ router.get("/getdailytests", VerifyUser, async (req, res) => {
     const dailytests = await DailyTest.find({ archive: true }).select(
       "_id dateid type"
     );
-    console.log(
-      "🚀 ~ file: tests.js:677 ~ router.get ~ dailytests:",
-      dailytests
-    );
     if (!dailytests) {
       return res.status(400).json({
         message: "cant find tests",
@@ -694,7 +688,6 @@ router.get("/getdailytests", VerifyUser, async (req, res) => {
       tests: [...dailytests, ...special],
     });
   } catch (error) {
-    console.log("🚀 ~ file: tests.js:689 ~ router.get ~ error:", error);
   }
 });
 
@@ -738,7 +731,6 @@ router.post("/addusertotest", async (req, res) => {
   const dateid = createTodayDateId();
   const t = req.query.t;
   const { userid, name, score, email } = req.body;
-  console.log("🚀 ~ file: tests.js:715 ~ router.post ~ email:", email);
   if (!userid) {
     return res.status(400).json({
       message: "no userid or name provided",
