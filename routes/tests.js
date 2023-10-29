@@ -633,17 +633,24 @@ router.get("/getdailytests", VerifyUser, async (req, res) => {
     if (id) {
       let dailytest;
       if (t === "sujectwiseseries") {
-        dailytest = await SpecialSeries.findOne({ _id: id })
-        dailytest.usersattended = dailytest.usersattended
-          .sort((a, b) => Number(b.totalscore) - Number(a.totalscore))
-          .map((user, index) => ({ ...user, rank: index + 1 }));
+        dailytest = await SpecialSeries.findOne({ _id: id }).lean()
+        usersattend = dailytest.usersattended;
+        usersattend.sort((a, b) => b.totalscore - a.totalscore);
+      
+        // Add rank to each user based on the sorted order
+        dailytest.usersattended = await usersattend.map((user, index) => ({
+          ...user,
+          ['rank']: index + 1,
+        }));
 
-      const newquestions = [].concat(...Object.values(dailytest.questions));
-        dailytest.questions = newquestions
+        const newquestions = [].concat(...Object.values(dailytest.questions));
+        dailytest.questions = newquestions;
+      
         return res.status(200).json({
           message: "Tests fetched",
           test: dailytest,
         });
+      
       } else {
         dailytest = await DailyTest.findOne({ _id: id })
           .populate({
@@ -663,7 +670,6 @@ router.get("/getdailytests", VerifyUser, async (req, res) => {
         dailytest.usersattended = dailytest.usersattended
           .sort((a, b) => Number(b.totalscore) - Number(a.totalscore))
           .map((user, index) => ({ ...user, rank: index + 1 }));
-
         dailytest.questions = questions;
         return res.status(200).json({
           message: "Tests fetched",
@@ -687,8 +693,7 @@ router.get("/getdailytests", VerifyUser, async (req, res) => {
       message: "Tests fetched",
       tests: [...dailytests, ...special],
     });
-  } catch (error) {
-  }
+  } catch (error) {}
 });
 
 router.get("/addusertotest", async (req, res) => {

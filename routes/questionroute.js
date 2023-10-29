@@ -335,7 +335,8 @@ router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
         {
           $match: {
             subject: sub,
-            "isreported.state": true,
+            "isreported.state": false,
+            "isflagged.state": false,
           },
         },
         { $sample: { size: Number(num) } },
