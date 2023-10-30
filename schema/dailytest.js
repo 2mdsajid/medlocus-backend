@@ -5,7 +5,7 @@ const dailytest = mongoose.Schema({
     type: String,
     enum: ["dailytest", "weeklytest", "sponsored","sujectwiseseries"],
     required: true,
-    default: "daily",
+    default: "dailytest",
   },
   isSponsored: {
     state: {
