@@ -791,9 +791,6 @@ router.post("/addusertotest", async (req, res) => {
     <div style="background-color: #3498db; color: #fff; padding: 10px; border-radius: 8px; margin: 16px 0;">
       <p style="font-size: 16px; margin: 0;">Test ID: ${dateid}</p>
     </div>
-    <div style="background-color: #2ecc71; color: #fff; padding: 10px; border-radius: 8px; margin: 16px 0;">
-      <p style="font-size: 16px; margin: 0;">Take tomorrow's test at 4 PM.</p>
-    </div>
     <a href="${
       process.env.FRONTEND
     }/result" style="color: #3498db; text-decoration: none; font-size: 16px; margin: 16px 0; display: block;">View Leaderboard and Answers</a>
