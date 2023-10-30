@@ -414,7 +414,7 @@ router.get(
 router.get("/createdailytest", async (req, res) => {
   try {
     const { t } = req.query;
-    if (!t || !["daily"].includes(t)) {
+    if (!t || !["dailytest"].includes(t)) {
       return res.status(400).json({
         message: "PLease you are forgetting a type",
       });
