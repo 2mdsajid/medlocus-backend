@@ -75,6 +75,10 @@ function cosineSimilarity(sentence1, sentence2) {
 router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
   try {
     const reviewtype = req.query.reviewtype;
+    console.log(
+      "🚀 ~ file: questionroute.js:78 ~ router.post ~ reviewtype:",
+      reviewtype
+    );
     const _id = req.body.questionElement._id;
     const questionElement = req.body.questionElement;
     const existingQuestion = await Question.findById(_id);
@@ -84,69 +88,72 @@ router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
       });
     }
 
-    // Check if subject or mergedunit has changed
-    let oldsub = questionElement.subject,
-      oldchapter = questionElement.chapter,
-      oldmergedunit = questionElement.mergedunit;
-    const subjectChanged = existingQuestion.subject !== questionElement.subject;
-    if (subjectChanged) {
-      oldsub = existingQuestion.subject;
-    }
-    const chapterChanged = existingQuestion.chapter !== questionElement.chapter;
-    if (chapterChanged) {
-      oldchapter = existingQuestion.chapter;
-    }
-    const mergedUnitChanged =
-      existingQuestion.mergedunit !== questionElement.mergedunit;
-    if (mergedUnitChanged) {
-      oldmergedunit = existingQuestion.mergedunit;
-    }
+    // // Check if subject or mergedunit has changed
+    // let oldsub = questionElement.subject,
+    //   oldchapter = questionElement.chapter,
+    //   oldmergedunit = questionElement.mergedunit;
+    // const subjectChanged = existingQuestion.subject !== questionElement.subject;
+    // if (subjectChanged) {
+    //   oldsub = existingQuestion.subject;
+    // }
+    // const chapterChanged = existingQuestion.chapter !== questionElement.chapter;
+    // if (chapterChanged) {
+    //   oldchapter = existingQuestion.chapter;
+    // }
+    // const mergedUnitChanged =
+    //   existingQuestion.mergedunit !== questionElement.mergedunit;
+    // if (mergedUnitChanged) {
+    //   oldmergedunit = existingQuestion.mergedunit;
+    // }
 
     // Update the existing question with new values
     existingQuestion.question = questionElement.question;
     existingQuestion.options = questionElement.options;
     existingQuestion.answer = questionElement.answer;
     existingQuestion.explanation = questionElement.explanation;
-    existingQuestion.subject = questionElement.subject;
-    existingQuestion.chapter = questionElement.chapter;
-    existingQuestion.mergedunit = questionElement.mergedunit;
-    existingQuestion.ispast = questionElement.ispast;
+    existingQuestion.subject =
+      questionElement.subject || existingQuestion.subject;
+    existingQuestion.chapter =
+      questionElement.chapter || existingQuestion.chapter;
+    existingQuestion.mergedunit =
+      questionElement.mergedunit || existingQuestion.mergedunit;
+    existingQuestion.ispast = questionElement.ispast || existingQuestion.ispast;
     existingQuestion.difficulty = questionElement.difficulty;
     existingQuestion.isverified = questionElement.isverified;
     existingQuestion.isadded.state = true;
 
     await existingQuestion.save();
-    if (subjectChanged || chapterChanged || mergedUnitChanged) {
-      const OldSubjectModel = getModelBasedOnSubject(oldsub);
-      const oldmodelqn = await OldSubjectModel.findOne({
-        questionid: new mongoose.Types.ObjectId(existingQuestion._id), // Assuming existingQuestion._id is already an ObjectId
-        chapter: oldchapter,
-        mergedunit: oldmergedunit,
-      });
-      await OldSubjectModel.deleteOne({
-        questionid: new mongoose.Types.ObjectId(existingQuestion._id),
-        chapter: oldchapter,
-        mergedunit: oldmergedunit,
-      });
-    }
+    // if (subjectChanged || chapterChanged || mergedUnitChanged) {
+    //   const OldSubjectModel = getModelBasedOnSubject(oldsub);
+    //   const oldmodelqn = await OldSubjectModel.findOne({
+    //     questionid: new mongoose.Types.ObjectId(existingQuestion._id), // Assuming existingQuestion._id is already an ObjectId
+    //     chapter: oldchapter,
+    //     mergedunit: oldmergedunit,
+    //   });
+    //   await OldSubjectModel.deleteOne({
+    //     questionid: new mongoose.Types.ObjectId(existingQuestion._id),
+    //     chapter: oldchapter,
+    //     mergedunit: oldmergedunit,
+    //   });
+    // }
 
-    const NewSubjectModel = getModelBasedOnSubject(questionElement.subject);
-    const questionInModelNew = await NewSubjectModel.findOne({
-      questionid: new mongoose.Types.ObjectId(existingQuestion._id), // Assuming existingQuestion._id is already an ObjectId
-      chapter: existingQuestion.chapter,
-      mergedunit: existingQuestion.mergedunit,
-    });
-    if (!questionInModelNew) {
-      const newSubjectEntry = new NewSubjectModel({
-        questionid: existingQuestion._id,
-        chapter: questionElement.chapter, // Update to the new chapter
-        mergedunit: existingQuestion.mergedunit,
-      });
-      await newSubjectEntry.save();
-    }
+    // const NewSubjectModel = getModelBasedOnSubject(questionElement.subject);
+    // const questionInModelNew = await NewSubjectModel.findOne({
+    //   questionid: new mongoose.Types.ObjectId(existingQuestion._id), // Assuming existingQuestion._id is already an ObjectId
+    //   chapter: existingQuestion.chapter,
+    //   mergedunit: existingQuestion.mergedunit,
+    // });
+    // if (!questionInModelNew) {
+    //   const newSubjectEntry = new NewSubjectModel({
+    //     questionid: existingQuestion._id,
+    //     chapter: questionElement.chapter, // Update to the new chapter
+    //     mergedunit: existingQuestion.mergedunit,
+    //   });
+    //   await newSubjectEntry.save();
+    // }
 
     const elem = {
-      _id: existingQuestion.id,
+      questionid: existingQuestion.id,
       userid:
         reviewtype === "reported"
           ? existingQuestion.isreported.by
@@ -232,21 +239,21 @@ router.post(
       });
 
       const savedQuestion = await existingQuestion.save();
-      const SubjectModel = getModelBasedOnSubject(subject);
-      const questioninmodelnew = await SubjectModel.findOne({
-        questionid: savedQuestion._id,
-        chapter: savedQuestion.chapter,
-        mergedunit: savedQuestion.mergedunit,
-      });
+      // const SubjectModel = getModelBasedOnSubject(subject);
+      // const questioninmodelnew = await SubjectModel.findOne({
+      //   questionid: savedQuestion._id,
+      //   chapter: savedQuestion.chapter,
+      //   mergedunit: savedQuestion.mergedunit,
+      // });
 
-      if (!questioninmodelnew) {
-        const newSubjectEntry = new SubjectModel({
-          questionid: savedQuestion._id,
-          chapter: savedQuestion.chapter,
-          mergedunit: savedQuestion.mergedunit,
-        });
-        await newSubjectEntry.save();
-      }
+      // if (!questioninmodelnew) {
+      //   const newSubjectEntry = new SubjectModel({
+      //     questionid: savedQuestion._id,
+      //     chapter: savedQuestion.chapter,
+      //     mergedunit: savedQuestion.mergedunit,
+      //   });
+      //   await newSubjectEntry.save();
+      // }
 
       const elem = {
         questionid: savedQuestion._id,
@@ -306,6 +313,8 @@ router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
   const num = req.query.n;
   const type = req.query.t;
   const sub = req.query.sub;
+  const { unit, chap } = req.query;
+  console.log("🚀 ~ file: questionroute.js:317 ~ router.get ~ req.query:", req.query)
   if (type === "subject" && !sub) {
     return res.status(400).json({
       message: "Missing parameter: subject",
@@ -335,6 +344,8 @@ router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
         {
           $match: {
             subject: sub,
+            chapter: chap,
+            mergedunit: unit,
             "isreported.state": false,
             "isflagged.state": false,
           },
