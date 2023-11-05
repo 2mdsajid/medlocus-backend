@@ -17,8 +17,11 @@ const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 router.get("/analytics", async (req, res) => {
   try {
     const totalQuestions = await Question.countDocuments();
+
     const verifiedQuestions = await Question.countDocuments({
       "isverified.state": true,
+      "isadded.state": true,
+      attempt: 1,
     });
     const reportedQuestions = await Question.countDocuments({
       "isreported.state": true,
@@ -107,11 +110,12 @@ router.get("/analytics", async (req, res) => {
     });
 
     const modifiedadmins = [];
-    const admins = await Admin.find().select("name questions");
+    const admins = await Admin.find().select("name questions questionsVerified");
     admins.forEach((admin) => {
       modifiedadmins.push({
         name: admin.name,
         "Number Of Questions": admin.questions,
+        "Verified": admin.questionsVerified
       });
     });
     res.status(200).json({
@@ -122,7 +126,7 @@ router.get("/analytics", async (req, res) => {
       subjectWiseChapters,
       subjectWiseMergedUnits,
       questionsAddedByDate,
-      modifiedadmins
+      modifiedadmins,
     });
   } catch (error) {
     res

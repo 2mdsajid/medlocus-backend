@@ -17,6 +17,7 @@ const Physics = require("../schema/physics");
 const Chemistry = require("../schema/chemistry");
 const Mat = require("../schema/mat");
 const DailyTest = require("../schema/dailytest");
+const Admin = require("../schema/admin");
 
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 const { newquestionlimiter } = require("../middlewares/limiter");
@@ -75,10 +76,6 @@ function cosineSimilarity(sentence1, sentence2) {
 router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
   try {
     const reviewtype = req.query.reviewtype;
-    console.log(
-      "🚀 ~ file: questionroute.js:78 ~ router.post ~ reviewtype:",
-      reviewtype
-    );
     const _id = req.body.questionElement._id;
     const questionElement = req.body.questionElement;
     const existingQuestion = await Question.findById(_id);
@@ -121,6 +118,7 @@ router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
     existingQuestion.difficulty = questionElement.difficulty;
     existingQuestion.isverified = questionElement.isverified;
     existingQuestion.isadded.state = true;
+    existingQuestion.attempt = 1;
 
     await existingQuestion.save();
     // if (subjectChanged || chapterChanged || mergedUnitChanged) {
@@ -168,6 +166,25 @@ router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
     return res.status(500).json({
       message: error.message,
     });
+  }
+});
+
+router.post("/confirmquestions", VerifyAdmin, async (req, res) => {
+  const { questionIds } = req.body;
+  try {
+    await Question.updateMany(
+      { _id: { $in: questionIds } },
+      { $set: { attempt: 1 } }
+    );
+
+    const admin = await Admin.findOne({ uuid: req.user.uuid });
+    admin.questionsVerified = admin.questionsVerified + questionIds.length;
+    await admin.save();
+
+    return res.status(200).json({ message: "Questions updated successfully." });
+  } catch (error) {
+    console.error("Error updating questions:", error);
+    res.status(500).json({ message: error.message });
   }
 });
 
@@ -282,7 +299,14 @@ router.get("/getreviewquestions", VerifyUser, async (req, res) => {
 
     let questions = [];
     questions = await Question.aggregate([
-      { $match: { "isadded.state": false, "isverified.state": false } },
+      {
+        $match: {
+          "isadded.state": false,
+          "isverified.state": false,
+          "isreported.state": false,
+          attempt: 0,
+        },
+      },
       { $sample: { size: Number(num) } },
     ]).exec();
     const formattedQuestions = questions.map((question) => ({
@@ -314,11 +338,12 @@ router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
   const type = req.query.t;
   const sub = req.query.sub;
   const { unit, chap } = req.query;
-  console.log("🚀 ~ file: questionroute.js:317 ~ router.get ~ req.query:", req.query)
-  if (type === "subject" && !sub) {
-    return res.status(400).json({
-      message: "Missing parameter: subject",
-    });
+  if (type === "subject") {
+    if (!sub || !unit || !chap) {
+      return res.status(400).json({
+        message: "Missing parameter",
+      });
+    }
   }
   if (!req.query.n) {
     return res.status(400).json({
@@ -348,6 +373,7 @@ router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
             mergedunit: unit,
             "isreported.state": false,
             "isflagged.state": false,
+            attempt: 0, //to set a verified parameter for admin added questions
           },
         },
         { $sample: { size: Number(num) } },
@@ -403,10 +429,11 @@ router.post("/addexplanation", VerifyAdmin, async (req, res) => {
     question.explanation = explanation;
     question.difficulty = difficulty[0] || "m";
     question.images.exp = image || "";
+    question.attempt = 1;
     await question.save();
     return res.status(200).json({
       message: "Explanation saved successfully",
-      _id: question._id,
+      questionid: question._id,
     });
   } catch (error) {
     return res.status(500).json({
@@ -475,6 +502,7 @@ router.post("/approvequestion", VerifyAdmin, async (req, res) => {
     }
     question.isverified.state = true;
     question.isverified.by = userid;
+    question.attempt = 1;
     await question.save();
     return res.status(200).json({
       message: "Question Approved successfully",

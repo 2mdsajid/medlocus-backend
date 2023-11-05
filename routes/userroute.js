@@ -61,6 +61,7 @@ router.get("/unsubscribe", VerifyUser, async (req, res) => {
     }
     return res.status(300).json({ message: "Email already unsubscribed" });
   } catch (error) {
+    console.log("🚀 ~ file: userroute.js:64 ~ router.get ~ error:", error)
     return res.status(500).json({
       message: "Failed to add email",
       error: error.message,

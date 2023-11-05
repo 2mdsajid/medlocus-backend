@@ -1,13 +1,11 @@
 const express = require("express");
 const router = express.Router();
-
 const {
   UNITWEIGHTAGE,
   SUBJECTWEIGHTAGE,
   UPDATED_SYLLABUS,
   data_series_subjectwise,
 } = require("../public/syllabus.js");
-
 const DailyTest = require("../schema/dailytest");
 const SpecialSeries = require("../schema/specialseries");
 const Question = require("../schema/question");
@@ -19,7 +17,6 @@ const Mat = require("../schema/mat");
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 const { limitermiddleware } = require("../middlewares/limiter");
 const { sendEmail, LOGO_URL } = require("./gmailroute");
-
 const createTodayDateId = () => {
   const currentDate = new Date();
   const year = currentDate.getFullYear();
@@ -28,7 +25,6 @@ const createTodayDateId = () => {
   const dateid = `${year}-${month}-${day}`;
   return dateid;
 };
-
 const getModelBasedOnSubject = (subject) => {
   let SubjectModel;
   switch (subject) {
@@ -54,7 +50,6 @@ const getModelBasedOnSubject = (subject) => {
 
   return SubjectModel;
 };
-
 const groupQuestionsBySubject = async (questions) => {
   const questionarray = {};
 
@@ -65,7 +60,6 @@ const groupQuestionsBySubject = async (questions) => {
   }
   return questionarray;
 };
-
 router.get(
   "/testquestions/:typeoftest",
   limitermiddleware,
@@ -410,7 +404,6 @@ router.get(
     });
   }
 );
-
 router.get("/createdailytest", async (req, res) => {
   try {
     const { t } = req.query;
@@ -484,7 +477,6 @@ router.get("/createdailytest", async (req, res) => {
     });
   }
 });
-
 router.post("/createsponsoredtest", async (req, res) => {
   try {
     const { t } = req.query;
@@ -600,7 +592,6 @@ router.get("/getsponsoredtest", async (req, res) => {
     });
   }
 });
-
 router.get("/invalidatedailytest", async (req, res) => {
   try {
     const dateid = createTodayDateId();
@@ -626,31 +617,29 @@ router.get("/invalidatedailytest", async (req, res) => {
     });
   }
 });
-
 router.get("/getdailytests", VerifyUser, async (req, res) => {
   try {
     const { id, t } = req.query;
     if (id) {
       let dailytest;
       if (t === "sujectwiseseries") {
-        dailytest = await SpecialSeries.findOne({ _id: id }).lean()
+        dailytest = await SpecialSeries.findOne({ _id: id }).lean();
         usersattend = dailytest.usersattended;
         usersattend.sort((a, b) => b.totalscore - a.totalscore);
-      
+
         // Add rank to each user based on the sorted order
         dailytest.usersattended = await usersattend.map((user, index) => ({
           ...user,
-          ['rank']: index + 1,
+          ["rank"]: index + 1,
         }));
 
         const newquestions = [].concat(...Object.values(dailytest.questions));
         dailytest.questions = newquestions;
-      
+
         return res.status(200).json({
           message: "Tests fetched",
           test: dailytest,
         });
-      
       } else {
         dailytest = await DailyTest.findOne({ _id: id })
           .populate({

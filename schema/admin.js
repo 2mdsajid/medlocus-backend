@@ -18,6 +18,10 @@ const adminSchema = new mongoose.Schema({
     type: "number",
     default:0,
   },
+  questionsVerified: {
+    type: "number",
+    default:0,
+  },
   name: {
     type: "string",
     required: true,

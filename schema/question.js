@@ -112,7 +112,7 @@ const questionSchema = new mongoose.Schema({
   },
   attempt: {
     type: Number,
-    default: 0,
+    default: 0, //to track admin added question verified or not
   },
   correctattempt: {
     type: Number,
