@@ -304,6 +304,7 @@ router.get("/getreviewquestions", VerifyUser, async (req, res) => {
           "isadded.state": false,
           "isverified.state": false,
           "isreported.state": false,
+          "isflagged.state": false,
           attempt: 0,
         },
       },
@@ -356,12 +357,22 @@ router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
 
     if (type === "reported") {
       questions = await Question.aggregate([
-        { $match: { "isreported.state": true } },
+        {
+          $match: {
+            "isreported.state": true,
+            "isflagged.state": false,
+          },
+        },
         { $sample: { size: Number(num) } },
       ]).exec();
     } else if (type === "added") {
       questions = await Question.aggregate([
-        { $match: { "isadded.state": false } },
+        {
+          $match: {
+            "isadded.state": false,
+            "isflagged.state": false,
+          },
+        },
         { $sample: { size: Number(num) } },
       ]).exec();
     } else if (type === "subject") {
@@ -380,7 +391,13 @@ router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
       ]).exec();
     } else {
       questions = await Question.aggregate([
-        { $match: { "isadded.state": false, "isverified.state": false } },
+        {
+          $match: {
+            "isadded.state": false,
+            "isverified.state": false,
+            "isflagged.state": false,
+          },
+        },
         { $sample: { size: Number(num) } },
       ]).exec();
     }
