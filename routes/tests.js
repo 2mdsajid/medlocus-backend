@@ -642,12 +642,14 @@ router.get("/getdailytests", VerifyUser, async (req, res) => {
         });
       } else {
         dailytest = await DailyTest.findOne({ _id: id })
-          .populate({
+        .populate({
             path: "questions.question",
             model: Question,
             select: "question options answer _id explanation",
-          })
-          .lean();
+        })
+        .sort({ date: -1 })  
+        .limit(4)
+        .lean();
         if (!dailytest) {
           return res.status(400).json({
             message: "cant find test",
