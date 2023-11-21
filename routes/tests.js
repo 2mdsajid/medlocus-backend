@@ -62,7 +62,7 @@ const groupQuestionsBySubject = async (questions) => {
 };
 router.get(
   "/testquestions/:typeoftest",
-  limitermiddleware,
+  
   async (req, res) => {
     const { model, num, sub, chap, unit } = req.query;
     const { typeoftest } = req.params;
@@ -79,7 +79,7 @@ router.get(
 
     if (!TEST_TYPES.includes(typeoftest)) {
       return res.status(400).json({
-        message: "Missing some parameters - type",
+        message: "Missing some parameters",
       });
     }
 
@@ -274,7 +274,7 @@ router.get(
           status: 300,
         });
       }
-      const fraction = numberofquestions / 200;
+      const fraction = 100 / 200;
       const subjectKeys = Object.keys(SUBJECTWEIGHTAGE);
       const questions = [];
 
