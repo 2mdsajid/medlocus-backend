@@ -16,6 +16,8 @@ const Chemistry = require("../schema/chemistry");
 const Mat = require("../schema/mat");
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 const { limitermiddleware } = require("../middlewares/limiter");
+const { checkCompatibility } = require("./addfile")
+
 const { sendEmail, LOGO_URL } = require("./gmailroute");
 const createTodayDateId = () => {
   const currentDate = new Date();
@@ -62,9 +64,9 @@ const groupQuestionsBySubject = async (questions) => {
 };
 router.get(
   "/testquestions/:typeoftest",
-  
+  limitermiddleware,
   async (req, res) => {
-    const { model, num, sub, chap, unit } = req.query;
+    const { model, num, sub, chap, unit, testid } = req.query;
     const { typeoftest } = req.params;
     const numberofquestions = parseInt(num);
     const TEST_TYPES = [
@@ -75,6 +77,7 @@ router.get(
       "dailytest",
       "weeklytest",
       "sujectwiseseries",
+      "prayash",
     ];
 
     if (!TEST_TYPES.includes(typeoftest)) {
@@ -395,8 +398,33 @@ router.get(
         return res.status(200).json({
           message: "Test retrieved successfully",
           questions: test.questions,
+          image: test.isSponsored.image
         });
-      } catch (error) {}
+      } catch (error) { }
+    }
+    else if (typeoftest === "prayash") {
+      try {
+        if (!testid) {
+          return res.status(404).json({
+            message: "oops! date mismatched !",
+          });
+        }
+
+        const test = await SpecialSeries.findOne({
+          type: "prayash",
+          dateid: testid,
+        });
+        if (!test) {
+          return res.status(404).json({
+            message: "Daily test not found",
+          });
+        }
+
+        return res.status(200).json({
+          message: "Test retrieved successfully",
+          questions: test.questions,
+        });
+      } catch (error) { }
     }
 
     return res.status(404).json({
@@ -477,6 +505,44 @@ router.get("/createdailytest", async (req, res) => {
     });
   }
 });
+
+router.post('/create-prayash', async (req, res) => {
+  try {
+    const { name, questions } = req.body;
+    const formattedName = name.replace(/\s+/g, '-'); // Replace spaces with '-'
+    const dateid = formattedName + '-' + createTodayDateId();
+    const combinedQuestions = {
+      combined: questions,
+      physics: [],
+      chemistry: [],
+      botany: [],
+      zoology: [],
+      mat: []
+    };
+
+    const newSpecialSeries = new SpecialSeries({
+      type: 'prayash',
+      dateid: dateid,
+      questions: combinedQuestions,
+      isSponsored: {
+        by: formattedName, 
+      },
+    });
+
+    await newSpecialSeries.save();
+
+    return res.status(200).json({
+      message: 'success',
+      url: process.env.FRONTEND + '/tests?type=prayash&testid=' + dateid
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: 'Internal Server Error',
+    });
+  }
+})
+
 router.post("/createsponsoredtest", async (req, res) => {
   try {
     const { t } = req.query;
@@ -642,14 +708,14 @@ router.get("/getdailytests", VerifyUser, async (req, res) => {
         });
       } else {
         dailytest = await DailyTest.findOne({ _id: id })
-        .populate({
+          .populate({
             path: "questions.question",
             model: Question,
             select: "question options answer _id explanation",
-        })
-        .sort({ date: -1 })  
-        .limit(4)
-        .lean();
+          })
+          .sort({ date: -1 })
+          .limit(4)
+          .lean();
         if (!dailytest) {
           return res.status(400).json({
             message: "cant find test",
@@ -684,7 +750,7 @@ router.get("/getdailytests", VerifyUser, async (req, res) => {
       message: "Tests fetched",
       tests: [...dailytests, ...special],
     });
-  } catch (error) {}
+  } catch (error) { }
 });
 
 router.get("/addusertotest", async (req, res) => {
@@ -694,13 +760,13 @@ router.get("/addusertotest", async (req, res) => {
   let test;
   t === "sujectwiseseries"
     ? (test = await SpecialSeries.findOne({
-        type: t,
-        dateid: dateid,
-      }))
+      type: t,
+      dateid: dateid,
+    }))
     : (test = await DailyTest.findOne({
-        type: t,
-        dateid: dateid,
-      }));
+      type: t,
+      dateid: dateid,
+    }));
 
   if (!test) {
     return res.status(400).json({
@@ -726,6 +792,7 @@ router.get("/addusertotest", async (req, res) => {
 router.post("/addusertotest", async (req, res) => {
   const dateid = createTodayDateId();
   const t = req.query.t;
+  const prayash_testid = req.query.prayash_testid;
   const { userid, name, score, email } = req.body;
   if (!userid) {
     return res.status(400).json({
@@ -733,15 +800,15 @@ router.post("/addusertotest", async (req, res) => {
     });
   }
   let test;
-  t === "sujectwiseseries"
+  t === "prayash"
     ? (test = await SpecialSeries.findOne({
-        type: t,
-        dateid: dateid,
-      }))
+      type: t,
+      dateid: prayash_testid,
+    }))
     : (test = await DailyTest.findOne({
-        type: t,
-        dateid: dateid,
-      }));
+      type: t,
+      dateid: dateid,
+    }));
 
   if (!test || test.archive === true) {
     return res.status(400).json({
@@ -773,8 +840,8 @@ router.post("/addusertotest", async (req, res) => {
     </div>
     <div style="background-color: #E0E0E0; padding: 12px; border-radius: 8px; margin: 16px 0;">
       <p style="font-size: 16px; margin: 0;"><strong>Name:</strong> ${decodeURI(
-        name
-      )}</p>
+    name
+  )}</p>
     </div>
     <div style="background-color: #E0E0E0; padding: 12px; border-radius: 8px; margin: 16px 0;">
       <p style="font-size: 16px; margin: 0;"><strong>Score:</strong> ${score}</p>
@@ -782,8 +849,7 @@ router.post("/addusertotest", async (req, res) => {
     <div style="background-color: #3498db; color: #fff; padding: 10px; border-radius: 8px; margin: 16px 0;">
       <p style="font-size: 16px; margin: 0;">Test ID: ${dateid}</p>
     </div>
-    <a href="${
-      process.env.FRONTEND
+    <a href="${process.env.FRONTEND
     }/result" style="color: #3498db; text-decoration: none; font-size: 16px; margin: 16px 0; display: block;">View Leaderboard and Answers</a>
     <p style="font-size: 18px; margin: 16px 0;">Thanks for attending the test. We encourage you to participate in other tests available in the Test section.</p>
     <p style="font-size: 18px; margin: 16px 0;">If you encounter any problems, feel free to discuss them in the Discussion section. You can also seek help and guidance from the toppers of previous tests.</p>

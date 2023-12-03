@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const specialseries = mongoose.Schema({
   type: {
     type: String,
-    enum: ["daily", "weekly", "sponsored","sujectwiseseries"],
+    enum: ["daily", "weekly", "sponsored", "sujectwiseseries", "prayash"],
     required: true,
     default: "daily",
   },
@@ -17,6 +17,7 @@ const specialseries = mongoose.Schema({
     },
     image: {
       type: String,
+      default:'https://res.cloudinary.com/dww0rxb4q/image/upload/v1701594279/per5j19vm0oshffpzda0.jpg',
     },
   },
   dateid: {
