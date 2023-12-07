@@ -506,18 +506,19 @@ router.get("/createdailytest", async (req, res) => {
   }
 });
 
-router.post('/create-prayash', async (req, res) => {
+router.post('/create-prayash', VerifyUser, async (req, res) => {
   try {
     const { name, questions } = req.body;
     const formattedName = name.replace(/\s+/g, '-'); // Replace spaces with '-'
     const dateid = formattedName + '-' + createTodayDateId();
     const combinedQuestions = {
-      combined: questions,
+      combined: [],
       physics: [],
       chemistry: [],
       botany: [],
       zoology: [],
-      mat: []
+      mat: [],
+      ...questions,
     };
 
     const newSpecialSeries = new SpecialSeries({
@@ -525,7 +526,7 @@ router.post('/create-prayash', async (req, res) => {
       dateid: dateid,
       questions: combinedQuestions,
       isSponsored: {
-        by: formattedName, 
+        by: formattedName,
       },
     });
 
