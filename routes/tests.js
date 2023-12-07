@@ -521,6 +521,12 @@ router.post('/create-prayash', VerifyUser, async (req, res) => {
       ...questions,
     };
 
+    const existingSpecialSeries = await SpecialSeries.findOne({ dateid });
+
+    if (existingSpecialSeries) {
+      return res.status(400).json({ message: "Series with the same name already exists." });
+    }
+
     const newSpecialSeries = new SpecialSeries({
       type: 'prayash',
       dateid: dateid,
