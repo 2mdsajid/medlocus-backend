@@ -30,6 +30,13 @@ function isTodayAfterDecember16() {
   return today < december16;
 }
 
+function isBeforeDecember6(testid) {
+  const last8Digits = testid.slice(-10)
+  const testDate = new Date(last8Digits);
+  const comparisonDate = new Date('2023-12-16');
+  return testDate < comparisonDate;
+}
+
 const groupQuestionsBySubject = async (questions) => {
   const questionarray = {};
 
@@ -47,7 +54,7 @@ router.get(
     const { model, num, sub, chap, unit, testid } = req.query;
     const { typeoftest } = req.params;
     const numberofquestions = parseInt(num);
-    const isDateOld = isTodayAfterDecember16()
+    const isDateOld = isBeforeDecember6(testid || '')
     // const TEST_TYPES = [
     //   "chapterwise",
     //   "unitwise",
