@@ -8,12 +8,8 @@ const {
 } = require("../public/syllabus.js");
 const DailyTest = require("../schema/dailytest");
 const SpecialSeries = require("../schema/specialseries");
+const CustomTest = require("../schema/customtests");
 const Question = require("../schema/question");
-const Botany = require("../schema/botany");
-const Zoology = require("../schema/zoology");
-const Physics = require("../schema/physics");
-const Chemistry = require("../schema/chemistry");
-const Mat = require("../schema/mat");
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 const { limitermiddleware } = require("../middlewares/limiter");
 const { checkCompatibility } = require("./addfile")
@@ -27,31 +23,13 @@ const createTodayDateId = () => {
   const dateid = `${year}-${month}-${day}`;
   return dateid;
 };
-const getModelBasedOnSubject = (subject) => {
-  let SubjectModel;
-  switch (subject) {
-    case "botany":
-      SubjectModel = Botany;
-      break;
-    case "zoology":
-      SubjectModel = Zoology;
-      break;
-    case "physics":
-      SubjectModel = Physics;
-      break;
-    case "chemistry":
-      SubjectModel = Chemistry;
-      break;
-    case "mat":
-      SubjectModel = Mat;
-      break;
-    default:
-      // Handle invalid subject
-      return "zoology";
-  }
 
-  return SubjectModel;
-};
+function isTodayAfterDecember16() {
+  const today = new Date();
+  const december16 = new Date(today.getFullYear(), 11, 15); // Month is 0-indexed, so 11 represents December
+  return today < december16;
+}
+
 const groupQuestionsBySubject = async (questions) => {
   const questionarray = {};
 
@@ -69,22 +47,23 @@ router.get(
     const { model, num, sub, chap, unit, testid } = req.query;
     const { typeoftest } = req.params;
     const numberofquestions = parseInt(num);
-    const TEST_TYPES = [
-      "chapterwise",
-      "unitwise",
-      "subjectwise",
-      "modeltest",
-      "dailytest",
-      "weeklytest",
-      "sujectwiseseries",
-      "prayash",
-    ];
+    const isDateOld = isTodayAfterDecember16()
+    // const TEST_TYPES = [
+    //   "chapterwise",
+    //   "unitwise",
+    //   "subjectwise",
+    //   "modeltest",
+    //   "dailytest",
+    //   "weeklytest",
+    //   "sujectwiseseries",
+    //   "prayash",
+    // ];
 
-    if (!TEST_TYPES.includes(typeoftest)) {
-      return res.status(400).json({
-        message: "Missing some parameters",
-      });
-    }
+    // if (!TEST_TYPES.includes(typeoftest)) {
+    //   return res.status(400).json({
+    //     message: "Missing some parameters",
+    //   });
+    // }
 
     if (["chapterwise", "unitwise", "subjectwise"].includes(typeoftest)) {
       if (numberofquestions > 30) {
@@ -339,32 +318,28 @@ router.get(
     }
     // /* DAILY TEST---------------------------- */
     else if (typeoftest === "dailytest") {
-      const dateid = createTodayDateId();
+      const dateid = testid ? testid : createTodayDateId();
       const testquestions = await DailyTest.findOne({
         type: "dailytest",
         dateid: dateid,
         archive: false,
       })
         .populate({
-          path: "questions.question",
-          model: Question,
-          select:
-            "question options answer explanation subject chapter images _id",
+          path: 'questions',
+          select: '_id question options answer explanation subject chapter mergedunit',
         })
-        .lean();
       if (!testquestions) {
         return res.status(404).json({
           message: " test not found",
         });
       }
-      const questions = await testquestions.questions.map((question) => {
-        return question.question;
-      });
-      const modifiedquestions = await questions.map((question) => ({
+
+      const modifiedquestions = await testquestions.map((question) => ({
         ...question,
         uans: "",
         timetaken: 0,
       }));
+
       const groupedQuestions = await groupQuestionsBySubject(modifiedquestions);
       return res.status(200).json({
         message: "Daily test retrieved successfully",
@@ -372,37 +347,8 @@ router.get(
       });
     }
 
-    // /* SUBJECTWISE SERIES------------------------------ */
-    else if (typeoftest === "sujectwiseseries") {
-      try {
-        const dateid = createTodayDateId();
-        if (!sub || data_series_subjectwise[dateid].subject !== sub) {
-          return res.status(404).json({
-            message: "oops! subject mismatched !",
-          });
-        }
-
-        const test = await SpecialSeries.findOne({
-          type: "sujectwiseseries",
-          dateid: dateid,
-          archive: false,
-        });
-
-        if (!test) {
-          return res.status(404).json({
-            message: "Daily test not found",
-          });
-        }
-        // const groupedQuestions = groupQuestionsBySubject(modifiedquestions);
-
-        return res.status(200).json({
-          message: "Test retrieved successfully",
-          questions: test.questions,
-          image: test.isSponsored.image
-        });
-      } catch (error) { }
-    }
-    else if (typeoftest === "prayash") {
+    // FOR PRAYASH PREVIOUS TESTS
+    else if (typeoftest === "prayash" && isDateOld) {
       try {
         if (!testid) {
           return res.status(404).json({
@@ -427,11 +373,44 @@ router.get(
       } catch (error) { }
     }
 
-    return res.status(404).json({
-      message: "Type of test not found",
-    });
+    // fetch tests by their ids -- incase the above did not work
+    else {
+      if (!testid) {
+        return res.status(400).json({
+          message: "PLease you are forgetting a type",
+        });
+      }
+
+      const test = await CustomTest.findOne({ testid });
+      if (!test) {
+        return res.status(404).json({ message: "Test not found" });
+      }
+
+      if (typeoftest !== test.type) {
+        return res.status(404).json({ message: "Test not found" });
+      }
+
+      const typeofquestions = test.questiontype;
+      let questions;
+      if (typeofquestions === 'withid') {
+        const test = await CustomTest.findOne({ testid })
+          .populate({
+            path: 'questionsIds',
+            select: '_id question options answer explanation subject chapter mergedunit',
+          })
+          .exec();
+
+        const ungroupedQuestions = test.questionsIds
+        questions = await groupQuestionsBySubject(ungroupedQuestions);
+
+      } else if (typeofquestions === 'withoutid') {
+        questions = test.questions;
+      }
+      return res.status(200).json({ questions });
+    }
   }
 );
+
 router.get("/createdailytest", async (req, res) => {
   try {
     const { t } = req.query;
@@ -506,41 +485,83 @@ router.get("/createdailytest", async (req, res) => {
   }
 });
 
+router.get("/fetchcustomtests", async (req, res) => {
+  const { testid } = req.query;
+  if (!testid) {
+    return res.status(400).json({
+      message: "PLease you are forgetting a type",
+    });
+  }
+
+  const test = await CustomTest.findOne({ testid });
+  if (!test) {
+    return res.status(404).json({ error: "Test not found" });
+  }
+
+  const typeofquestions = test.questiontype;
+  let questions;
+  if (typeofquestions === 'withid') {
+    const test = await CustomTest.findOne({ testid })
+      .populate({
+        path: 'questionsIds',
+        select: '_id question options answer explanation subject chapter mergedunit',
+      })
+      .exec();
+
+    questions = test.questionsIds
+  } else if (typeofquestions === 'withoutid') {
+    questions = test.questions;
+  }
+
+  res.status(200).json({ questions });
+
+})
+
+
 router.post('/create-prayash', VerifyUser, async (req, res) => {
   try {
-    const { name, questions } = req.body;
-    const formattedName = name.replace(/\s+/g, '-'); // Replace spaces with '-'
-    const dateid = formattedName + '-' + createTodayDateId();
-    const combinedQuestions = {
-      combined: [],
-      physics: [],
-      chemistry: [],
-      botany: [],
-      zoology: [],
-      mat: [],
-      ...questions,
-    };
+    const { name, type, questiontype, questions } = req.body;
+    const formattedName = name.replace(/\s+/g, '-');
+    const testid = formattedName + '-' + createTodayDateId();
 
-    const existingSpecialSeries = await SpecialSeries.findOne({ dateid });
+    const existingCustomTest = await CustomTest.findOne({ testid });
 
-    if (existingSpecialSeries) {
-      return res.status(400).json({ message: "Series with the same name already exists." });
+    if (existingCustomTest) {
+      return res.status(400).json({ message: "Test Series with the same name already exists." });
     }
 
-    const newSpecialSeries = new SpecialSeries({
-      type: 'prayash',
-      dateid: dateid,
-      questions: combinedQuestions,
-      isSponsored: {
-        by: formattedName,
-      },
-    });
+    if (questiontype === 'withoutid') {
+      const customTest = new CustomTest({
+        type: type,
+        testid: testid,
+        questions: questions,
+        questiontype: questiontype,
+        isSponsored: {
+          by: formattedName,
+        },
+      });
+      await customTest.save();
 
-    await newSpecialSeries.save();
+    }
+
+    if (questiontype === 'withid') {
+      const customTest = new CustomTest({
+        type: type,
+        testid: testid,
+        questionsIds: questions,
+        questiontype: questiontype,
+        isSponsored: {
+          by: formattedName,
+        },
+      });
+      await customTest.save();
+
+    }
+
 
     return res.status(200).json({
       message: 'success',
-      url: process.env.FRONTEND + '/tests?type=prayash&testid=' + dateid
+      url: process.env.FRONTEND + '/tests?type=prayash&testid=' + testid
     });
   } catch (error) {
     console.error(error);
@@ -550,121 +571,6 @@ router.post('/create-prayash', VerifyUser, async (req, res) => {
   }
 })
 
-router.post("/createsponsoredtest", async (req, res) => {
-  try {
-    const { t } = req.query;
-    const { by, image, num } = req.body;
-    const numberofquestions = parseInt(num);
-    if (![50, 100, 150, 200].includes(numberofquestions)) {
-      return res.status(400).json({
-        message: "number of questions not matched or unusual",
-        status: 300,
-      });
-    }
-
-    if (!by) {
-      return res.status(400).json({
-        message: "sponsored by and sponsored image is required",
-      });
-    }
-
-    if (!t || !["daily", "weekly", "sponsored"].includes(t)) {
-      return res.status(400).json({
-        message: "PLease you are forgetting a type",
-      });
-    }
-
-    const fraction = numberofquestions / 200;
-    let questionsArray = [];
-    const dateid = createTodayDateId();
-
-    if (t === "daily") {
-      const existingdate = await DailyTest.findOne({
-        dateid: dateid,
-      });
-      if (existingdate) {
-        return res.status(301).json({
-          message: "Daily Test Already exist",
-        });
-      }
-    }
-    // Initialize a counter to keep track of how many questions have been fetched
-    let fetchedQuestionsCount = 0;
-    // Iterate through the UNITWEIGHTAGE object
-    for (const category in UNITWEIGHTAGE) {
-      for (const unit in UNITWEIGHTAGE[category]) {
-        const weightage = UNITWEIGHTAGE[category][unit] * fraction;
-
-        const questions = await Question.aggregate([
-          {
-            $match: {
-              mergedunit: unit,
-              "isverified.state": true,
-              "isadded.state": true,
-              "isreported.state": false,
-            },
-          },
-          { $sample: { size: weightage } },
-          {
-            $project: {
-              _id: 1,
-            },
-          },
-        ]).exec();
-
-        questionsArray.push(...questions);
-        questions.length === 0 && console.log(unit, questions.length);
-      }
-    }
-
-    const dailytest = new DailyTest({
-      dateid: dateid,
-      isSponsored: {
-        state: true,
-        by,
-        image,
-      },
-      questions: questionsArray,
-    });
-    await dailytest.save();
-    // const savedtest = await dailytest.save();
-    return res.status(200).json({
-      message: "sponsored test created successfully",
-      dailytest: questionsArray.length,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: error.message,
-    });
-  }
-});
-router.get("/getsponsoredtest", async (req, res) => {
-  try {
-    const tests = await DailyTest.aggregate([
-      {
-        $match: {
-          "isSponsored.state": true,
-          archive: false,
-        },
-      },
-      {
-        $project: {
-          _id: 1,
-          isSponsored: 1,
-        },
-      },
-    ]).exec();
-    // const savedtest = await dailytest.save();
-    return res.status(200).json({
-      message: "sponsored test fetched successfully",
-      tests,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: error.message,
-    });
-  }
-});
 router.get("/invalidatedailytest", async (req, res) => {
   try {
     const dateid = createTodayDateId();

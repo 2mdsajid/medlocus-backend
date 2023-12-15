@@ -1,8 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const jwt = require("jsonwebtoken");
-const mongoose = require("mongoose");
-const { ObjectId } = require("mongodb");
+const { importquestionlimiter } = require("../middlewares/limiter");
 
 const {
   MECSYLLABUS,
@@ -11,42 +9,11 @@ const {
   UPDATED_SYLLABUS,
 } = require("../public/syllabus.js");
 const Question = require("../schema/question"); // Import the Question model
-const Botany = require("../schema/botany");
-const Zoology = require("../schema/zoology");
-const Physics = require("../schema/physics");
-const Chemistry = require("../schema/chemistry");
-const Mat = require("../schema/mat");
-const DailyTest = require("../schema/dailytest");
 const Admin = require("../schema/admin");
 
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 const { newquestionlimiter } = require("../middlewares/limiter");
 
-const getModelBasedOnSubject = (subject) => {
-  let SubjectModel;
-  switch (subject) {
-    case "botany":
-      SubjectModel = Botany;
-      break;
-    case "zoology":
-      SubjectModel = Zoology;
-      break;
-    case "physics":
-      SubjectModel = Physics;
-      break;
-    case "chemistry":
-      SubjectModel = Chemistry;
-      break;
-    case "mat":
-      SubjectModel = Mat;
-      break;
-    default:
-      // Handle invalid subject
-      return "zoology";
-  }
-
-  return SubjectModel;
-};
 
 function cosineSimilarity(sentence1, sentence2) {
   const words1 = sentence1.split(" ");
@@ -115,12 +82,22 @@ router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
     existingQuestion.mergedunit =
       questionElement.mergedunit || existingQuestion.mergedunit;
     existingQuestion.ispast = questionElement.ispast || existingQuestion.ispast;
-    existingQuestion.difficulty = questionElement.difficulty;
+    existingQuestion.difficulty = questionElement.difficulty || existingQuestion.difficulty;
     existingQuestion.isverified = questionElement.isverified;
     existingQuestion.isadded.state = true;
     existingQuestion.attempt = 1;
 
     await existingQuestion.save();
+
+    const question = {
+      _id: existingQuestion._id,
+      question: existingQuestion.question,
+      options: existingQuestion.options,
+      answer: existingQuestion.answer,
+      explanation: existingQuestion.explanation,
+      images: existingQuestion.images,
+      subject: existingQuestion.subject,
+    }
     // if (subjectChanged || chapterChanged || mergedUnitChanged) {
     //   const OldSubjectModel = getModelBasedOnSubject(oldsub);
     //   const oldmodelqn = await OldSubjectModel.findOne({
@@ -152,6 +129,7 @@ router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
 
     const elem = {
       questionid: existingQuestion.id,
+      question: question,
       userid:
         reviewtype === "reported"
           ? existingQuestion.isreported.by
@@ -653,6 +631,95 @@ router.post("/getqnsbyid", VerifyUser, async (req, res) => {
     });
   }
 });
+
+router.get('/get-chapters', async (req, res) => {
+  try {
+    const { sub } = req.query;
+    if (!sub) {
+      return res.status(400).json({ error: 'Subject not provided' });
+    }
+    const chapters = await Question.distinct('chapter', { subject: sub });
+    const chapterCounts = {};
+    for (const chapter of chapters) {
+      const count = await Question.countDocuments({ subject: sub, chapter });
+      chapterCounts[chapter] = count;
+    }
+
+    res.json({ chapters, chapterCounts });
+  } catch (error) {
+    console.error('Error retrieving chapters:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+router.get('/importquestions', VerifyAdmin, async (req, res) => {
+  const { sub, chap, unit, iyq } = req.query;
+  const userid = req.user.id
+  let questions
+  if (iyq === 'true') {
+    questions = await Question.aggregate([
+      {
+        $match: {
+          subject: sub,
+          mergedunit: unit,
+          chapter: chap,
+          "isverified.state": true,
+          "isadded.state": true,
+          "isreported.state": false,
+          "isflagged.state": false,
+          "isadded.by": userid,
+        },
+      },
+      {
+        $project: {
+          question: 1,
+          options: 1,
+          answer: 1,
+          explanation: 1,
+          images: 1,
+          _id: 1,
+        },
+      },
+    ]).exec();
+  } else {
+    questions = await Question.aggregate([
+      {
+        $match: {
+          subject: sub,
+          mergedunit: unit,
+          chapter: chap,
+          "isverified.state": true,
+          "isadded.state": true,
+          "isreported.state": false,
+          "isflagged.state": false,
+
+        },
+      },
+      {
+        $project: {
+          question: 1,
+          options: 1,
+          answer: 1,
+          explanation: 1,
+          images: 1,
+          _id: 1,
+        },
+      },
+    ]).exec();
+  }
+
+  if (questions.length === 0) {
+    return res.status(400).json({
+      message: "No questions found",
+    });
+  }
+  return res.status(200).json({
+    message: "fetched questions",
+    questions,
+  });
+
+})
+
 
 module.cosineSimilarity = cosineSimilarity;
 module.exports = router;

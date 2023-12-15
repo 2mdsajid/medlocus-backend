@@ -24,11 +24,6 @@ router.post("/savenote", VerifyMedlocusAdmin, async (req, res, next) => {
       readtime,
       introimage,
     } = req.body;
-    console.log(
-      "🚀 ~ file: notesroute.js:23 ~ router.post ~ req.body:",
-      req.body
-    );
-
     let newnote;
 
     if (id) {
@@ -151,7 +146,6 @@ router.post("/savedraft", VerifyMedlocusAdmin, async (req, res, next) => {
 router.get("/getnotes", async (req, res) => {
   try {
     const { i, v } = req.query;
-    console.log("🚀 ~ file: notesroute.js:154 ~ router.get ~ req.query:", req.query)
     if (i) {
       const note = await Note.findOne({ noteid: i }).select(
         "_id noteid title category author content introimage intro keywords readtime upvote comments date views"
@@ -166,7 +160,6 @@ router.get("/getnotes", async (req, res) => {
         note.views = note.views + 1;
         await note.save();
       }
-      console.log("🚀 ~ file: notesroute.js:165 ~ router.get ~ note:", note)
       return res.status(200).json({
         note,
         message: "note fetched successfully",
@@ -196,7 +189,6 @@ router.get("/getnotes", async (req, res) => {
 router.get("/findallnotes", VerifyMedlocusAdmin, async (req, res) => {
   try {
     const { i } = req.query;
-    console.log("🚀 ~ file: notesroute.js:192 ~ router.get ~ i:", i);
     if (i) {
       const note = await Note.findOne({ _id: i });
       if (!note) {
