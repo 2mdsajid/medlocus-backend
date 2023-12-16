@@ -325,17 +325,20 @@ router.get(
     }
     // /* DAILY TEST---------------------------- */
     else if (typeoftest === "dailytest") {
-      const dateid = testid ? testid : createTodayDateId();
-
+      const dateid = createTodayDateId();
+      
       const testquestions = await DailyTest.findOne({
         type: "dailytest",
         dateid: dateid,
         archive: false,
-      }).populate({
+      })
+        .populate({
           path: 'questions',
           select: '_id question options answer explanation subject chapter mergedunit',
-        }).lean()
-
+        })
+        .sort({ /* Add the field you want to use for sorting, e.g., timestamp: -1 */ })
+        .limit(1)
+        .lean();
         if (!testquestions) {
           return res.status(404).json({
             message: " test not found",
@@ -347,6 +350,7 @@ router.get(
         uans: "",
         timetaken: 0,
       }));
+      
       const groupedQuestions = await groupQuestionsBySubject(modifiedquestions);
       return res.status(200).json({
         message: "Daily test retrieved successfully",
