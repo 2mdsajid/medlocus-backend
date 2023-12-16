@@ -326,27 +326,27 @@ router.get(
     // /* DAILY TEST---------------------------- */
     else if (typeoftest === "dailytest") {
       const dateid = testid ? testid : createTodayDateId();
+
       const testquestions = await DailyTest.findOne({
         type: "dailytest",
         dateid: dateid,
         archive: false,
-      })
-        .populate({
+      }).populate({
           path: 'questions',
           select: '_id question options answer explanation subject chapter mergedunit',
-        })
-      if (!testquestions) {
-        return res.status(404).json({
-          message: " test not found",
-        });
-      }
+        }).lean()
 
-      const modifiedquestions = await testquestions.map((question) => ({
+        if (!testquestions) {
+          return res.status(404).json({
+            message: " test not found",
+          });
+        }
+
+      const modifiedquestions = await testquestions.questions.map((question) => ({
         ...question,
         uans: "",
         timetaken: 0,
       }));
-
       const groupedQuestions = await groupQuestionsBySubject(modifiedquestions);
       return res.status(200).json({
         message: "Daily test retrieved successfully",
@@ -468,15 +468,18 @@ router.get("/createdailytest", async (req, res) => {
       }
     }
 
+    const idArray = questionsArray.map(question => question._id);
+    
     const newArray = [];
-    questionsArray.forEach((questionId, index) => {
-      newArray.push({
-        question: questionId,
-      });
-    });
+    
+    // questionsArray.forEach((questionId, index) => {
+    //   newArray.push({
+    //     question: questionId,
+    //   });
+    // });
     const dailytest = new DailyTest({
       dateid: dateid,
-      questions: newArray,
+      questions: idArray,
     });
     await dailytest.save();
 
