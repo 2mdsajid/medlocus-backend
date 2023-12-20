@@ -511,7 +511,7 @@ router.get("/getdailytests",VerifyUser, async (req, res) => {
     }).select("_id testid date type");
 
     if (!customTestsWithAttendees || customTestsWithAttendees.length === 0) {
-      return res.status(400).json({
+      return res.status(200).json({
         message: "No tests found with attendees",
       });
     }
