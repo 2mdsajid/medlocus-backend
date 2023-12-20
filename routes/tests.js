@@ -507,9 +507,9 @@ router.get("/getdailytests",VerifyUser, async (req, res) => {
   try {
     const customTestsWithAttendees = await CustomTest.find({
       archive: true,
-      $where: "this.usersattended.length > 0",
+      usersattended: { $exists: true, $not: { $size: 0 } },
     }).select("_id testid date type");
-
+    
     if (!customTestsWithAttendees || customTestsWithAttendees.length === 0) {
       return res.status(200).json({
         message: "No tests found with attendees",
