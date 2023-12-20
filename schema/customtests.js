@@ -50,7 +50,7 @@ const customTestSchema = new mongoose.Schema({
     },
     archive: {
         type: Boolean,
-        default: false,
+        default: true,
     },
     usersconnected: {
         type: [String],

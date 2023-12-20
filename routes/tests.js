@@ -24,19 +24,6 @@ const createTodayDateId = () => {
   return dateid;
 };
 
-function isTodayAfterDecember16() {
-  const today = new Date();
-  const december16 = new Date(today.getFullYear(), 11, 15); // Month is 0-indexed, so 11 represents December
-  return today < december16;
-}
-
-function isBeforeDecember6(testid) {
-  const last8Digits = testid.slice(-10)
-  const testDate = new Date(last8Digits);
-  const comparisonDate = new Date('2023-12-16');
-  return testDate < comparisonDate;
-}
-
 const groupQuestionsBySubject = async (questions) => {
   const questionarray = {};
 
@@ -47,30 +34,32 @@ const groupQuestionsBySubject = async (questions) => {
   }
   return questionarray;
 };
+
 router.get(
   "/testquestions/:typeoftest",
   limitermiddleware,
   async (req, res) => {
-    const { model, num, sub, chap, unit, testid } = req.query;
+    const { model, num, sub, chap, unit, userid } = req.query;
     const { typeoftest } = req.params;
     const numberofquestions = parseInt(num);
-    const isDateOld = isBeforeDecember6(testid || '')
-    // const TEST_TYPES = [
-    //   "chapterwise",
-    //   "unitwise",
-    //   "subjectwise",
-    //   "modeltest",
-    //   "dailytest",
-    //   "weeklytest",
-    //   "sujectwiseseries",
-    //   "prayash",
-    // ];
 
-    // if (!TEST_TYPES.includes(typeoftest)) {
-    //   return res.status(400).json({
-    //     message: "Missing some parameters",
-    //   });
-    // }
+    let testid = req.query.testid;
+    if (typeoftest === 'dailytest') {
+      testid = createTodayDateId();
+    }
+
+    const FIXED_TESTS = [
+      "chapterwise",
+      "unitwise",
+      "subjectwise",
+    ];
+
+    if (!typeoftest) {
+      return res.status(400).json({
+        message: "Missing some parameters",
+      });
+    }
+
 
     if (["chapterwise", "unitwise", "subjectwise"].includes(typeoftest)) {
       if (numberofquestions > 30) {
@@ -323,94 +312,40 @@ router.get(
         questions: groupedQuestions,
       });
     }
-    // /* DAILY TEST---------------------------- */
-    else if (typeoftest === "dailytest") {
-      const dateid = createTodayDateId();
-      
-      const testquestions = await DailyTest.findOne({
-        type: "dailytest",
-        dateid: dateid,
-        archive: false,
-      })
-        .populate({
-          path: 'questions',
-          select: '_id question options answer explanation subject chapter mergedunit',
-        })
-        .sort({ /* Add the field you want to use for sorting, e.g., timestamp: -1 */ })
-        .limit(1)
-        .lean();
-        if (!testquestions) {
-          return res.status(404).json({
-            message: " test not found",
-          });
-        }
-
-      const modifiedquestions = await testquestions.questions.map((question) => ({
-        ...question,
-        uans: "",
-        timetaken: 0,
-      }));
-      
-      const groupedQuestions = await groupQuestionsBySubject(modifiedquestions);
-      return res.status(200).json({
-        message: "Daily test retrieved successfully",
-        questions: groupedQuestions,
-      });
-    }
-
-    // FOR PRAYASH PREVIOUS TESTS
-    else if (typeoftest === "prayash" && isDateOld) {
-      try {
-        if (!testid) {
-          return res.status(404).json({
-            message: "oops! date mismatched !",
-          });
-        }
-
-        const test = await SpecialSeries.findOne({
-          type: "prayash",
-          dateid: testid,
-        });
-        if (!test) {
-          return res.status(404).json({
-            message: "Daily test not found",
-          });
-        }
-
-        return res.status(200).json({
-          message: "Test retrieved successfully",
-          questions: test.questions,
-        });
-      } catch (error) { }
-    }
 
     // fetch tests by their ids -- incase the above did not work
     else {
       if (!testid) {
         return res.status(400).json({
-          message: "PLease you are forgetting a type",
+          message: "undefined testid",
         });
       }
 
-      const test = await CustomTest.findOne({ testid });
+      // for daily tests only -- to get current date from server not from client -- timezones may vary
+      const test = await CustomTest.findOne({ testid: testid, type: typeoftest });
       if (!test) {
         return res.status(404).json({ message: "Test not found" });
       }
 
-      if (typeoftest !== test.type) {
-        return res.status(404).json({ message: "Test not found" });
+      const userExists = test.usersattended.some((user) => user.userid === userid);
+      if (userExists) {
+        return res.status(400).json({
+          message: "You Have Already Attended This Test",
+        });
       }
+
+      test.usersconnected.push(userid);
+      const savedest = await test.save();
 
       const typeofquestions = test.questiontype;
       let questions;
       if (typeofquestions === 'withid') {
-        const test = await CustomTest.findOne({ testid })
+        const test = await CustomTest.findOne({ testid: testid, type: typeoftest })
           .populate({
             path: 'questionsIds',
             select: '_id question options answer explanation subject chapter mergedunit',
           })
           .exec();
-
         const ungroupedQuestions = test.questionsIds
         questions = await groupQuestionsBySubject(ungroupedQuestions);
 
@@ -424,32 +359,23 @@ router.get(
 
 router.get("/createdailytest", async (req, res) => {
   try {
-    const { t } = req.query;
-    if (!t || !["dailytest"].includes(t)) {
-      return res.status(400).json({
-        message: "PLease you are forgetting a type",
-      });
-    }
     let questionsArray = [];
-    const dateid = createTodayDateId();
-    // if (t === "daily") {
-    //   const existingdate = await DailyTest.findOne({
-    //     dateid: dateid,
-    //   });
-    //   if (existingdate) {
-    //     return res.status(301).json({
-    //       message: "Daily Test Already exist",
-    //     });
-    //   }
-    // }
-    // Initialize a counter to keep track of how many questions have been fetched
-    let fetchedQuestionsCount = 0;
+    const testid = createTodayDateId();
+
+    const type = req.query.t
+    if (!['dailytest'].includes(type)) {
+      return res.status(404).send({ message: "unknown type" })
+    }
+
+    const existingCustomTest = await CustomTest.findOne({ testid, type });
+    if (existingCustomTest) {
+      return res.status(400).json({ message: "Test with the same name already exists." });
+    }
 
     // Iterate through the UNITWEIGHTAGE object
     for (const category in UNITWEIGHTAGE) {
       for (const unit in UNITWEIGHTAGE[category]) {
         const weightage = UNITWEIGHTAGE[category][unit];
-
         const questions = await Question.aggregate([
           {
             $match: {
@@ -468,30 +394,23 @@ router.get("/createdailytest", async (req, res) => {
           },
         ]).exec();
         questionsArray.push(...questions);
-        questions.length === 0 && console.log(unit, questions.length);
+        questions.length === 0 && console.log(unit, questions.length); //console the unit with zero questions fetched
       }
     }
-
     const idArray = questionsArray.map(question => question._id);
-    
-    const newArray = [];
-    
-    // questionsArray.forEach((questionId, index) => {
-    //   newArray.push({
-    //     question: questionId,
-    //   });
-    // });
-    const dailytest = new DailyTest({
-      dateid: dateid,
-      questions: idArray,
-    });
-    await dailytest.save();
 
-    // const savedtest = await dailytest.save();
+    const customTest = new CustomTest({
+      type: 'dailytest',
+      testid: testid,
+      questionsIds: idArray,
+      questiontype: 'withid',
+    });
+    await customTest.save();
     return res.status(200).json({
       message: "Daily test created successfully",
-      dailytest: newArray.length,
+      dailytest: idArray.length,
     });
+
   } catch (error) {
     return res.status(500).json({
       message: error.message,
@@ -499,46 +418,13 @@ router.get("/createdailytest", async (req, res) => {
   }
 });
 
-router.get("/fetchcustomtests", async (req, res) => {
-  const { testid } = req.query;
-  if (!testid) {
-    return res.status(400).json({
-      message: "PLease you are forgetting a type",
-    });
-  }
-
-  const test = await CustomTest.findOne({ testid });
-  if (!test) {
-    return res.status(404).json({ error: "Test not found" });
-  }
-
-  const typeofquestions = test.questiontype;
-  let questions;
-  if (typeofquestions === 'withid') {
-    const test = await CustomTest.findOne({ testid })
-      .populate({
-        path: 'questionsIds',
-        select: '_id question options answer explanation subject chapter mergedunit',
-      })
-      .exec();
-
-    questions = test.questionsIds
-  } else if (typeofquestions === 'withoutid') {
-    questions = test.questions;
-  }
-
-  res.status(200).json({ questions });
-
-})
-
-
 router.post('/create-prayash', VerifyUser, async (req, res) => {
   try {
     const { name, type, questiontype, questions } = req.body;
     const formattedName = name.replace(/\s+/g, '-');
     const testid = formattedName + '-' + createTodayDateId();
 
-    const existingCustomTest = await CustomTest.findOne({ testid });
+    const existingCustomTest = await CustomTest.findOne({ testid, type });
 
     if (existingCustomTest) {
       return res.status(400).json({ message: "Test Series with the same name already exists." });
@@ -588,7 +474,13 @@ router.post('/create-prayash', VerifyUser, async (req, res) => {
 router.get("/invalidatedailytest", async (req, res) => {
   try {
     const dateid = createTodayDateId();
-    const dailytest = await DailyTest.findOne({ dateid });
+
+    const type = req.query.type
+    if (!['dailytest'].includes(type)) {
+      return res.status(404).send({ message: "unknown type" })
+    }
+
+    const dailytest = await CustomTest.findOne({ testid: dateid, type });
     if (!dailytest) {
       return res.status(200).json({
         message: "No Test Found",
@@ -610,91 +502,109 @@ router.get("/invalidatedailytest", async (req, res) => {
     });
   }
 });
-router.get("/getdailytests", VerifyUser, async (req, res) => {
+
+router.get("/getdailytests",VerifyUser, async (req, res) => {
   try {
-    const { id, t } = req.query;
-    if (id) {
-      let dailytest;
-      if (t === "sujectwiseseries") {
-        dailytest = await SpecialSeries.findOne({ _id: id }).lean();
-        usersattend = dailytest.usersattended;
-        usersattend.sort((a, b) => b.totalscore - a.totalscore);
+    const customTestsWithAttendees = await CustomTest.find({
+      archive: true,
+      $where: "this.usersattended.length > 0",
+    }).select("_id testid date type");
 
-        // Add rank to each user based on the sorted order
-        dailytest.usersattended = await usersattend.map((user, index) => ({
-          ...user,
-          ["rank"]: index + 1,
-        }));
-
-        const newquestions = [].concat(...Object.values(dailytest.questions));
-        dailytest.questions = newquestions;
-
-        return res.status(200).json({
-          message: "Tests fetched",
-          test: dailytest,
-        });
-      } else {
-        dailytest = await DailyTest.findOne({ _id: id })
-          .populate({
-            path: "questions.question",
-            model: Question,
-            select: "question options answer _id explanation",
-          })
-          .sort({ date: -1 })
-          .limit(4)
-          .lean();
-        if (!dailytest) {
-          return res.status(400).json({
-            message: "cant find test",
-          });
-        }
-        const questions = await dailytest.questions.map((question) => {
-          return question.question;
-        });
-        dailytest.usersattended = dailytest.usersattended
-          .sort((a, b) => Number(b.totalscore) - Number(a.totalscore))
-          .map((user, index) => ({ ...user, rank: index + 1 }));
-        dailytest.questions = questions;
-        return res.status(200).json({
-          message: "Tests fetched",
-          test: dailytest,
-        });
-      }
-    }
-
-    const special = await SpecialSeries.find({ archive: true }).select(
-      "_id dateid type"
-    );
-    const dailytests = await DailyTest.find({ archive: true }).select(
-      "_id dateid type"
-    );
-    if (!dailytests) {
+    if (!customTestsWithAttendees || customTestsWithAttendees.length === 0) {
       return res.status(400).json({
-        message: "cant find tests",
+        message: "No tests found with attendees",
       });
     }
     return res.status(200).json({
       message: "Tests fetched",
-      tests: [...dailytests, ...special],
+      tests: customTestsWithAttendees,
     });
-  } catch (error) { }
+
+  } catch (error) {
+    return res.status(400).json({
+      message: error.message,
+    });
+  }
 });
 
-router.get("/addusertotest", async (req, res) => {
-  const userid = req.query.userid;
-  const t = req.query.t;
-  const dateid = createTodayDateId();
-  let test;
-  t === "sujectwiseseries"
-    ? (test = await SpecialSeries.findOne({
-      type: t,
-      dateid: dateid,
-    }))
-    : (test = await DailyTest.findOne({
-      type: t,
-      dateid: dateid,
-    }));
+router.get("/getdailytests/:typeoftest",VerifyUser, async (req, res) => {
+  try {
+    const { typeoftest } = req.params;
+    let testid = req.query.testid;
+    // if (typeoftest === 'dailytest') {
+    //   testid = createTodayDateId();
+    // }
 
+    if (!testid) {
+      return res.status(400).json({
+        message: "Undefined testid",
+      });
+    }
+
+    // Retrieve the test
+    let testQuery = { testid: testid, type: typeoftest };
+    let test = await CustomTest.findOne(testQuery);
+    if (!test) {
+      return res.status(404).json({ message: "Test not found" });
+    }
+    let testQuestions = test.questions
+
+    const typeofquestions = test.questiontype;
+    if (typeofquestions === 'withid') {
+      test = await CustomTest.findOne(testQuery)
+        .populate({
+          path: 'questionsIds',
+          select: '_id question options answer explanation subject chapter mergedunit',
+        })
+        .sort({ date: -1 })
+        .limit(4)
+        .exec();
+
+      testQuestions = test.questionsIds;
+    }
+
+    if (typeofquestions === 'withoutid') {
+      const { physics, chemistry, botany, zoology, mat } = test.questions
+      testQuestions = [...zoology, ...botany, ...chemistry, ...physics, ...mat]
+    }
+
+
+    return res.status(200).json({
+      message: "Test fetched",
+      test,
+      questions: testQuestions,
+    });
+
+  } catch (error) {
+    console.error("Error in getdailytests route:", error);
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+});
+
+
+router.post("/addusertotest", async (req, res) => {
+  const { typeoftest } = req.query;
+  let testid = req.query.testid;
+  // if (typeoftest === 'dailytest') {
+  //   testid = createTodayDateId();
+  // }
+
+  if (!testid) {
+    return res.status(400).json({
+      message: "undefined testid",
+    });
+  }
+
+  const { userid, name, score, email } = req.body;
+  if (!userid) {
+    return res.status(400).json({
+      message: "no userid or name provided",
+    });
+  }
+
+  let test = await CustomTest.findOne({ testid: testid, type: typeoftest })
   if (!test) {
     return res.status(400).json({
       message: "cant find test",
@@ -704,50 +614,10 @@ router.get("/addusertotest", async (req, res) => {
   const userExists = test.usersattended.some((user) => user.userid === userid);
   if (userExists) {
     return res.status(400).json({
-      message: "You Have Already attended the test",
-    });
-  }
-
-  test.usersconnected.push(userid);
-  const savedest = await test.save();
-
-  return res.status(200).json({
-    message: "saved connecteduser",
-  });
-});
-
-router.post("/addusertotest", async (req, res) => {
-  const dateid = createTodayDateId();
-  const t = req.query.t;
-  const prayash_testid = req.query.prayash_testid;
-  const { userid, name, score, email } = req.body;
-  if (!userid) {
-    return res.status(400).json({
-      message: "no userid or name provided",
-    });
-  }
-  let test;
-  t === "prayash"
-    ? (test = await SpecialSeries.findOne({
-      type: t,
-      dateid: prayash_testid,
-    }))
-    : (test = await DailyTest.findOne({
-      type: t,
-      dateid: dateid,
-    }));
-
-  if (!test || test.archive === true) {
-    return res.status(400).json({
-      message: "cant find test",
-    });
-  }
-  const userExists = test.usersattended.some((user) => user.userid === userid);
-  if (userExists) {
-    return res.status(400).json({
       message: "Already attended the test",
     });
   }
+
   test.usersattended.push({
     userid,
     name,
@@ -774,7 +644,7 @@ router.post("/addusertotest", async (req, res) => {
       <p style="font-size: 16px; margin: 0;"><strong>Score:</strong> ${score}</p>
     </div>
     <div style="background-color: #3498db; color: #fff; padding: 10px; border-radius: 8px; margin: 16px 0;">
-      <p style="font-size: 16px; margin: 0;">Test ID: ${dateid}</p>
+      <p style="font-size: 16px; margin: 0;">Test ID: ${testid}</p>
     </div>
     <a href="${process.env.FRONTEND
     }/result" style="color: #3498db; text-decoration: none; font-size: 16px; margin: 16px 0; display: block;">View Leaderboard and Answers</a>
