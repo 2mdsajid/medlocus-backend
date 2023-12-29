@@ -277,7 +277,7 @@ router.get(
               "isflagged.state": false,
             },
           },
-          { $sample: { size: questionsToFetch } },
+          { $sample: { size: SUBJECTWEIGHTAGE[subject] * fraction } },
           {
             $project: {
               question: 1,
@@ -422,7 +422,7 @@ router.post('/create-prayash', VerifyUser, async (req, res) => {
   try {
     const { name, type, questiontype, questions } = req.body;
     const formattedName = name.replace(/\s+/g, '-');
-    const testid = formattedName + '-' + createTodayDateId();
+    const testid = formattedName
 
     const existingCustomTest = await CustomTest.findOne({ testid, type });
 

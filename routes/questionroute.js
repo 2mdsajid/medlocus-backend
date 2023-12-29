@@ -198,7 +198,7 @@ router.post(
         },
       ]).exec();
 
-      const threshold = 0.3; // Define the threshold (30%)
+      const threshold = 0.1; // Define the threshold (30%)
 
       const matchingQuestions = questions.map((question) => {
         const similarity = cosineSimilarity(
@@ -234,22 +234,6 @@ router.post(
       });
 
       const savedQuestion = await existingQuestion.save();
-      // const SubjectModel = getModelBasedOnSubject(subject);
-      // const questioninmodelnew = await SubjectModel.findOne({
-      //   questionid: savedQuestion._id,
-      //   chapter: savedQuestion.chapter,
-      //   mergedunit: savedQuestion.mergedunit,
-      // });
-
-      // if (!questioninmodelnew) {
-      //   const newSubjectEntry = new SubjectModel({
-      //     questionid: savedQuestion._id,
-      //     chapter: savedQuestion.chapter,
-      //     mergedunit: savedQuestion.mergedunit,
-      //   });
-      //   await newSubjectEntry.save();
-      // }
-
       const elem = {
         questionid: savedQuestion._id,
         userid: savedQuestion.isadded.by,
