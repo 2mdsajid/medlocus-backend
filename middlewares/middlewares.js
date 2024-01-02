@@ -61,20 +61,23 @@ const VerifyMedlocusAdmin = async (req, res, next) => {
 };
 
 // midddown function for testing purposes only   for   testing purposes 
- 
-const VerifyUser = (req, res, next) => {
-  const bearer = req.headers.authorization;
-  const token = bearer ? bearer.split(" ")[1] : null;
-  if (!token) {
-      return res.status(401).json({ message: "Unauthorized" });
-  }
+const VerifyUser = async (req, res, next) => {
   try {
-      const secretkey = process.env.JWT_SECRET_KEY;
-      const user = jwt.verify(token, secretkey);
-      req.user = user;
-      next();
+    const bearer = req.headers.authorization;
+    const token = bearer ? bearer.split(" ")[1] : null;
+    if (!token) return res.status(401).json({ message: "Invalid Authentication" });
+    
+    const secretkey = process.env.JWT_SECRET_KEY;
+    const userFromAuth = jwt.verify(token, secretkey);
+
+    const user = await User.findById(userFromAuth._id).select('_id name email image role key questions discussions')
+    if (!user) return res.status(403).json({ message: "Invalid Authentication" });
+    
+    req.userId = user._id;
+    next();
+
   } catch (error) {
-      return res.status(401).json({ message: "Invalid token" });
+    return res.status(401).json({ message: "Invalid Authentication" });
   }
 };
 

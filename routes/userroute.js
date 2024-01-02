@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const jwt = require("jsonwebtoken");
 
 // nodemailer cofnigurration
 const nodemailer = require("nodemailer");
@@ -13,6 +14,8 @@ const transporter = nodemailer.createTransport({
 
 const DailyTest = require("../schema/dailytest");
 const Admin = require("../schema/admin");
+const User = require("../schema/user");
+const Organization = require("../schema/organization");
 const Unsubscribed = require("../schema/unsubscribed");
 
 const { VerifyUser } = require("../middlewares/middlewares");
@@ -66,6 +69,18 @@ router.get("/unsubscribe", VerifyUser, async (req, res) => {
       message: "Failed to add email",
       error: error.message,
     });
+  }
+});
+// get single user data
+router.get("/user", VerifyUser, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const user = await User.findById(userId).select('_id name email image role key questions discussions')
+    if (!user) return res.status(404).json({ message: "User not found" });
+    return res.status(200).json({ user })
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
