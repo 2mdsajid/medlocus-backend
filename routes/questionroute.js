@@ -404,38 +404,8 @@ router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
   }
 });
 
-router.post("/addexplanation", VerifyAdmin, async (req, res) => {
-  try {
-    const { explanation, questionid, difficulty, image } = req.body;
-    if (!questionid || !explanation) {
-      return res.status(400).json({
-        message: "Missing parameters",
-      });
-    }
-    const userid = req.user.id;
-    const question = await Question.findById(questionid);
-    if (!question) {
-      return res.status(404).json({
-        message: "Question not found",
-      });
-    }
 
-    question.explanation = explanation;
-    question.difficulty = difficulty[0] || "m";
-    question.images.exp = image || "";
-    question.attempt = 1;
-    await question.save();
-    return res.status(200).json({
-      message: "Explanation saved successfully",
-      questionid: question._id,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: error.message,
-    });
-  }
-});
-
+// reporting questions by users
 router.post("/reportquestion", VerifyUser, async (req, res) => {
   try {
     const { message, questionid } = req.body;
@@ -444,7 +414,7 @@ router.post("/reportquestion", VerifyUser, async (req, res) => {
         message: "Missing parameters",
       });
     }
-    const userid = req.user.id;
+    const userid = req.userId;
     const question = await Question.findById(questionid);
     if (!question) {
       return res.status(404).json({
@@ -463,17 +433,19 @@ router.post("/reportquestion", VerifyUser, async (req, res) => {
     question.isreported.message = message;
     question.isverified.state = false;
     await question.save();
+    console.log("🚀 ~ file: questionroute.js:354 ~ router.post ~ question:", question)
     return res.status(200).json({
       message: "Question reported successfully",
-      _id: question._id,
+      questionid: question._id,
     });
   } catch (error) {
     return res.status(500).json({
-      message: error.message,
+      message: 'An error has occurred',
     });
   }
 });
 
+// approve question by admin
 router.post("/approvequestion", VerifyAdmin, async (req, res) => {
   try {
     const { questionid } = req.body;
@@ -482,7 +454,7 @@ router.post("/approvequestion", VerifyAdmin, async (req, res) => {
         message: "Missing parameters",
       });
     }
-    const userid = req.user.id;
+    const userid = req.userId;
     const question = await Question.findById(questionid);
     if (!question) {
       return res.status(404).json({
@@ -498,11 +470,13 @@ router.post("/approvequestion", VerifyAdmin, async (req, res) => {
     question.isverified.by = userid;
     question.attempt = 1;
     await question.save();
+    console.log("🚀 ~ file: questionroute.js:390 ~ router.post ~ question:", question)
     return res.status(200).json({
       message: "Question Approved successfully",
-      _id: question._id,
+      questionid: question._id,
       addedby: question.isadded.by,
     });
+    
   } catch (error) {
     return res.status(500).json({
       message: error.message,
@@ -510,6 +484,7 @@ router.post("/approvequestion", VerifyAdmin, async (req, res) => {
   }
 });
 
+// flag unwanted questions
 router.post("/flagquestion", VerifyAdmin, async (req, res) => {
   try {
     const { message, questionid } = req.body;
@@ -518,7 +493,7 @@ router.post("/flagquestion", VerifyAdmin, async (req, res) => {
         message: "Missing parameters",
       });
     }
-    const userid = req.user.id;
+    const userid = req.userId;
     const question = await Question.findById(questionid);
     if (!question) {
       return res.status(404).json({
@@ -529,9 +504,10 @@ router.post("/flagquestion", VerifyAdmin, async (req, res) => {
     question.isflagged.by = userid;
     question.isflagged.message = message;
     await question.save();
+    console.log("🚀 ~ file: questionroute.js:425 ~ router.post ~ question:", question)
     return res.status(200).json({
       message: "Question Flagged successfully",
-      _id: question._id,
+      questionid: question._id,
     });
   } catch (error) {
     return res.status(500).json({
