@@ -516,37 +516,27 @@ router.post("/flagquestion", VerifyAdmin, async (req, res) => {
   }
 });
 
-router.get("/getqnbyid", VerifyUser, async (req, res) => {
-  const id = req.query.i;
-  const user = req.user;
+// get single question by its ID
+router.get("/get-question/:id", VerifyUser, async (req, res) => {
+  const id = req.params.id;
   if (!id) {
     return res.status(400).json({
-      message: "Missing parameter: question ID",
+      message: "Missing parameter",
     });
   }
   try {
-    const question = await Question.findById(id);
+    const question = await Question.findById(id)
+      .select('_id question options answer explanation subject chapter mergedunit difficulty images')
+      .lean()
     if (!question) {
       return res.status(404).json({
         message: "Question not found",
       });
     }
-    const formattedQuestion = {
-      _id: question._id,
-      question: question.question,
-      options: question.options,
-      answer: question.answer,
-      explanation: question.explanation,
-      subject: question.subject,
-      chapter: question.chapter,
-      mergedunit: question.mergedunit,
-      ispast: question.ispast,
-      difficulty: question.difficulty,
-      images: question.images,
-    };
+
     return res.status(200).json({
       message: "Question fetched successfully",
-      question: formattedQuestion,
+      question,
     });
   } catch (error) {
     return res.status(500).json({
