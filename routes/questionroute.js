@@ -40,37 +40,81 @@ function cosineSimilarity(sentence1, sentence2) {
   return similarity;
 }
 
-router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
+// add neq questions
+router.post(
+  "/savequestion",
+  VerifyUser,
+  newquestionlimiter,
+  async (req, res) => {
+    try {
+      const {
+        question,
+        options,
+        answer,
+        explanation,
+        subject,
+        chapter,
+        mergedunit,
+        ispast,
+        difficulty,
+        images,
+      } = req.body.questionElement;
+
+      const state = ['admin', 'moderator', 'sajid', 'superadmin'].includes(req.role) ? true : false
+      const newQuestion = new Question({
+        question,
+        options,
+        answer,
+        explanation,
+        subject,
+        chapter,
+        mergedunit,
+        ispast,
+        difficulty,
+        images,
+        isadded: {
+          state: state,
+          by: req.userId,
+        },
+        isverified: {
+          state: state,
+          by: state ? req.userId : '',
+        }
+      })
+      const savedQuestion = await newQuestion.save();
+
+      return res.status(200).json({
+        message: "question added successfully",
+        questionid: savedQuestion._id,
+        addedby: savedQuestion.isadded.by
+      });
+    } catch (error) {
+      return res.status(500).json({
+        message: 'An error has occurred',
+      });
+    }
+  }
+);
+
+// update questions - admin only
+router.post("/updatequestion", VerifyAdmin, async (req, res) => {
   try {
     const reviewtype = req.query.reviewtype;
     const _id = req.body.questionElement._id;
     const questionElement = req.body.questionElement;
-    const existingQuestion = await Question.findById(_id);
+
+    let existingQuestion = await Question.findById(_id);
     if (!existingQuestion) {
       return res.status(404).json({
         message: "Question not found",
       });
     }
 
-    // // Check if subject or mergedunit has changed
-    // let oldsub = questionElement.subject,
-    //   oldchapter = questionElement.chapter,
-    //   oldmergedunit = questionElement.mergedunit;
-    // const subjectChanged = existingQuestion.subject !== questionElement.subject;
-    // if (subjectChanged) {
-    //   oldsub = existingQuestion.subject;
-    // }
-    // const chapterChanged = existingQuestion.chapter !== questionElement.chapter;
-    // if (chapterChanged) {
-    //   oldchapter = existingQuestion.chapter;
-    // }
-    // const mergedUnitChanged =
-    //   existingQuestion.mergedunit !== questionElement.mergedunit;
-    // if (mergedUnitChanged) {
-    //   oldmergedunit = existingQuestion.mergedunit;
-    // }
+    const isverified = {
+      state: true,
+      by: req.user._id,
+    }
 
-    // Update the existing question with new values
     existingQuestion.question = questionElement.question;
     existingQuestion.options = questionElement.options;
     existingQuestion.answer = questionElement.answer;
@@ -83,7 +127,7 @@ router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
       questionElement.mergedunit || existingQuestion.mergedunit;
     existingQuestion.ispast = questionElement.ispast || existingQuestion.ispast;
     existingQuestion.difficulty = questionElement.difficulty || existingQuestion.difficulty;
-    existingQuestion.isverified = questionElement.isverified;
+    existingQuestion.isverified = isverified;
     existingQuestion.isadded.state = true;
     existingQuestion.attempt = 1;
 
@@ -98,47 +142,17 @@ router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
       images: existingQuestion.images,
       subject: existingQuestion.subject,
     }
-    // if (subjectChanged || chapterChanged || mergedUnitChanged) {
-    //   const OldSubjectModel = getModelBasedOnSubject(oldsub);
-    //   const oldmodelqn = await OldSubjectModel.findOne({
-    //     questionid: new mongoose.Types.ObjectId(existingQuestion._id), // Assuming existingQuestion._id is already an ObjectId
-    //     chapter: oldchapter,
-    //     mergedunit: oldmergedunit,
-    //   });
-    //   await OldSubjectModel.deleteOne({
-    //     questionid: new mongoose.Types.ObjectId(existingQuestion._id),
-    //     chapter: oldchapter,
-    //     mergedunit: oldmergedunit,
-    //   });
-    // }
 
-    // const NewSubjectModel = getModelBasedOnSubject(questionElement.subject);
-    // const questionInModelNew = await NewSubjectModel.findOne({
-    //   questionid: new mongoose.Types.ObjectId(existingQuestion._id), // Assuming existingQuestion._id is already an ObjectId
-    //   chapter: existingQuestion.chapter,
-    //   mergedunit: existingQuestion.mergedunit,
-    // });
-    // if (!questionInModelNew) {
-    //   const newSubjectEntry = new NewSubjectModel({
-    //     questionid: existingQuestion._id,
-    //     chapter: questionElement.chapter, // Update to the new chapter
-    //     mergedunit: existingQuestion.mergedunit,
-    //   });
-    //   await newSubjectEntry.save();
-    // }
-
-    const elem = {
-      questionid: existingQuestion.id,
+   
+    return res.status(200).json({
+      message: "Question updated successfully",
+      questionid: existingQuestion._id,
       question: question,
+      verifiedby: req.user._id,
       userid:
         reviewtype === "reported"
           ? existingQuestion.isreported.by
           : existingQuestion.isadded.by,
-      type: reviewtype,
-    };
-    return res.status(200).json({
-      message: "Question updated successfully",
-      elem,
     });
   } catch (error) {
     return res.status(500).json({
@@ -146,6 +160,7 @@ router.post("/reviewquestion", VerifyAdmin, async (req, res) => {
     });
   }
 });
+
 
 router.post("/confirmquestions", VerifyAdmin, async (req, res) => {
   const { questionIds } = req.body;
