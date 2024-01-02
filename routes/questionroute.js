@@ -1,18 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const { importquestionlimiter } = require("../middlewares/limiter");
 
-const {
-  MECSYLLABUS,
-  UNITWEIGHTAGE,
-  SUBJECTWEIGHTAGE,
-  UPDATED_SYLLABUS,
-} = require("../public/syllabus.js");
-const Question = require("../schema/question"); // Import the Question model
+const Question = require("../schema/question");
 const Admin = require("../schema/admin");
 
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
-const { newquestionlimiter } = require("../middlewares/limiter");
+const { newquestionlimiter,importquestionlimiter } = require("../middlewares/limiter");
 
 
 function cosineSimilarity(sentence1, sentence2) {
@@ -143,7 +136,7 @@ router.post("/updatequestion", VerifyAdmin, async (req, res) => {
       subject: existingQuestion.subject,
     }
 
-   
+
     return res.status(200).json({
       message: "Question updated successfully",
       questionid: existingQuestion._id,
@@ -161,8 +154,8 @@ router.post("/updatequestion", VerifyAdmin, async (req, res) => {
   }
 });
 
-
-router.post("/confirmquestions", VerifyAdmin, async (req, res) => {
+// approve-many-questions by their IDs
+router.post("/approve-many-questions", VerifyAdmin, async (req, res) => {
   const { questionIds } = req.body;
   try {
     await Question.updateMany(
@@ -181,90 +174,7 @@ router.post("/confirmquestions", VerifyAdmin, async (req, res) => {
   }
 });
 
-router.post(
-  "/savequestion",
-  VerifyUser,
-  newquestionlimiter,
-  async (req, res) => {
-    try {
-      const {
-        question,
-        options,
-        answer,
-        explanation,
-        subject,
-        chapter,
-        mergedunit,
-        ispast,
-        difficulty,
-        isadded,
-        isverified,
-        images,
-      } = req.body.questionElement;
-
-      // matching for existing question
-      const questions = await Question.aggregate([
-        {
-          $match: {
-            subject: subject,
-            mergedunit: mergedunit,
-            chapter: chapter,
-          },
-        },
-      ]).exec();
-
-      const threshold = 0.1; // Define the threshold (30%)
-
-      const matchingQuestions = questions.map((question) => {
-        const similarity = cosineSimilarity(
-          req.body.questionElement.question,
-          question.question
-        );
-        return { question, similarity };
-      });
-
-      matchingQuestions.sort((a, b) => b.similarity - a.similarity);
-      if (
-        matchingQuestions.length > 0 &&
-        matchingQuestions[0].similarity > threshold
-      ) {
-        return res.status(400).json({
-          message: "Question too similar to one of our existing questions",
-        });
-      }
-
-      const existingQuestion = new Question({
-        question,
-        options,
-        answer,
-        explanation,
-        subject,
-        chapter,
-        mergedunit,
-        ispast,
-        difficulty,
-        isadded,
-        isverified,
-        images,
-      });
-
-      const savedQuestion = await existingQuestion.save();
-      const elem = {
-        questionid: savedQuestion._id,
-        userid: savedQuestion.isadded.by,
-      };
-      return res.status(200).json({
-        message: "question added successfully",
-        elem,
-      });
-    } catch (error) {
-      return res.status(500).json({
-        message: error.message,
-      });
-    }
-  }
-);
-
+// for unverified questions - newly added, not verified by admin
 router.get("/getreviewquestions", VerifyUser, async (req, res) => {
   try {
     const num = req.query.n;
@@ -311,6 +221,7 @@ router.get("/getreviewquestions", VerifyUser, async (req, res) => {
   }
 });
 
+// for reported, newly added questions to be verified
 router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
   const num = req.query.n;
   const type = req.query.t;
@@ -404,7 +315,6 @@ router.get("/getreportedquestions", VerifyAdmin, async (req, res) => {
   }
 });
 
-
 // reporting questions by users
 router.post("/reportquestion", VerifyUser, async (req, res) => {
   try {
@@ -433,7 +343,6 @@ router.post("/reportquestion", VerifyUser, async (req, res) => {
     question.isreported.message = message;
     question.isverified.state = false;
     await question.save();
-    console.log("🚀 ~ file: questionroute.js:354 ~ router.post ~ question:", question)
     return res.status(200).json({
       message: "Question reported successfully",
       questionid: question._id,
@@ -470,13 +379,12 @@ router.post("/approvequestion", VerifyAdmin, async (req, res) => {
     question.isverified.by = userid;
     question.attempt = 1;
     await question.save();
-    console.log("🚀 ~ file: questionroute.js:390 ~ router.post ~ question:", question)
     return res.status(200).json({
       message: "Question Approved successfully",
       questionid: question._id,
       addedby: question.isadded.by,
     });
-    
+
   } catch (error) {
     return res.status(500).json({
       message: error.message,
@@ -504,7 +412,6 @@ router.post("/flagquestion", VerifyAdmin, async (req, res) => {
     question.isflagged.by = userid;
     question.isflagged.message = message;
     await question.save();
-    console.log("🚀 ~ file: questionroute.js:425 ~ router.post ~ question:", question)
     return res.status(200).json({
       message: "Question Flagged successfully",
       questionid: question._id,
@@ -545,58 +452,8 @@ router.get("/get-question/:id", VerifyUser, async (req, res) => {
   }
 });
 
-router.post("/getqnsbyid", VerifyUser, async (req, res) => {
-  const ids = req.body.ids;
-  const rep_ids = req.body.rep_ids;
-  const user = req.user;
 
-  if (!ids || !Array.isArray(ids)) {
-    return res.status(400).json({
-      message: "Invalid or missing parameter: questions IDs",
-    });
-  }
-
-  try {
-    const questions = await Question.find({ _id: { $in: ids } }).select(
-      "question _id isverified isreported"
-    );
-
-    let qn_added = [];
-    let qn_reported = [];
-    questions.forEach((question) => {
-      if (question.isreported.state) {
-        qn_reported.push({
-          _id: question._id,
-          question: question.question,
-          isverified: question.isverified.state,
-        });
-      } else {
-        qn_added.push({
-          _id: question._id,
-          question: question.question,
-          isverified: question.isverified.state,
-        });
-      }
-    });
-
-    if (!questions || questions.length === 0) {
-      return res.status(404).json({
-        message: "Questions not found",
-      });
-    }
-
-    return res.status(200).json({
-      message: "Questions fetched successfully",
-      qn_added,
-      qn_reported,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: error.message,
-    });
-  }
-});
-
+// UNDER BETA routes
 router.get('/get-chapters', async (req, res) => {
   try {
     const { sub } = req.query;
@@ -616,6 +473,7 @@ router.get('/get-chapters', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
 
 router.get('/importquestions', VerifyAdmin, async (req, res) => {
   const { sub, chap, unit, iyq } = req.query;
@@ -685,6 +543,140 @@ router.get('/importquestions', VerifyAdmin, async (req, res) => {
 
 })
 
+//  DEPRECATED route
+router.post("/addexplanation", VerifyAdmin, async (req, res) => {
+
+  return res.status(200).json({
+    message: "Deprecated Route Invoked",
+  })
+
+  try {
+    const { explanation, questionid, difficulty, image } = req.body;
+    if (!questionid || !explanation) {
+      return res.status(400).json({
+        message: "Missing parameters",
+      });
+    }
+    const userid = req.user.id;
+    const question = await Question.findById(questionid);
+    if (!question) {
+      return res.status(404).json({
+        message: "Question not found",
+      });
+    }
+
+    question.explanation = explanation;
+    question.difficulty = difficulty[0] || "m";
+    question.images.exp = image || "";
+    question.attempt = 1;
+    await question.save();
+    return res.status(200).json({
+      message: "Explanation saved successfully",
+      questionid: question._id,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+
+router.post("/getqnsbyid", VerifyUser, async (req, res) => {
+
+  return res.status(200).json({
+    message: "Deprecated Route Invoked",
+  })
+
+  const ids = req.body.ids;
+  const rep_ids = req.body.rep_ids;
+  const user = req.user;
+
+  if (!ids || !Array.isArray(ids)) {
+    return res.status(400).json({
+      message: "Invalid or missing parameter: questions IDs",
+    });
+  }
+
+  try {
+    const questions = await Question.find({ _id: { $in: ids } }).select(
+      "question _id isverified isreported"
+    );
+
+    let qn_added = [];
+    let qn_reported = [];
+    questions.forEach((question) => {
+      if (question.isreported.state) {
+        qn_reported.push({
+          _id: question._id,
+          question: question.question,
+          isverified: question.isverified.state,
+        });
+      } else {
+        qn_added.push({
+          _id: question._id,
+          question: question.question,
+          isverified: question.isverified.state,
+        });
+      }
+    });
+
+    if (!questions || questions.length === 0) {
+      return res.status(404).json({
+        message: "Questions not found",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Questions fetched successfully",
+      qn_added,
+      qn_reported,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+
 
 module.cosineSimilarity = cosineSimilarity;
 module.exports = router;
+
+
+
+/* 
+// QUESTION VERIFICATION
+
+      // // matching for existing question
+      // const questions = await Question.aggregate([
+      //   {
+      //     $match: {
+      //       subject: subject,
+      //       mergedunit: mergedunit,
+      //       chapter: chapter,
+      //     },
+      //   },
+      // ]).exec();
+
+      // const threshold = 0.1; // Define the threshold (30%)
+
+      // const matchingQuestions = questions.map((question) => {
+      //   const similarity = cosineSimilarity(
+      //     req.body.questionElement.question,
+      //     question.question
+      //   );
+      //   return { question, similarity };
+      // });
+
+      // matchingQuestions.sort((a, b) => b.similarity - a.similarity);
+      // if (
+      //   matchingQuestions.length > 0 &&
+      //   matchingQuestions[0].similarity > threshold
+      // ) {
+      //   return res.status(400).json({
+      //     message: "Question too similar to one of our existing questions",
+      //   });
+      // }
+
+
+*/
