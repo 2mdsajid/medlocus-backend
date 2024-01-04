@@ -15,6 +15,7 @@ const transporter = nodemailer.createTransport({
 const DailyTest = require("../schema/dailytest");
 const Admin = require("../schema/admin");
 const User = require("../schema/user");
+const NonUser = require("../schema/nonuser");
 const Organization = require("../schema/organization");
 const Unsubscribed = require("../schema/unsubscribed");
 
@@ -81,6 +82,29 @@ router.get("/user", VerifyUser, async (req, res) => {
   } catch (error) {
     console.error("Error fetching user:", error);
     return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// for non logged users
+router.post("/add-nonuser", async (req, res) => {
+  try {
+    const { value } = req.body;
+    const ip = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.connection.remoteAddress;
+
+    if (!value) return res.status(400).json({ message: 'Fuck bro you missing something fields.' });
+
+    const existingNonUser = await NonUser.findOne({ uuid: value });
+    if (existingNonUser) return res.status(400).json({ message: 'Non-user with the provided key already exists.' });
+
+    const newNonUser = new NonUser({
+      uuid: value,
+      ip
+    });
+    await newNonUser.save();
+    return res.status(201).json({ message: 'Non-user added successfully.' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Internal Server Error' });
   }
 });
 
