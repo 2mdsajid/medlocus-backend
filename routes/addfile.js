@@ -5,11 +5,6 @@ const multer = require("multer");
 const upload = multer({ dest: "uploads/" }); // Destination folder for uploaded files
 const fs = require("fs");
 const Question = require("../schema/question"); // Import the Question model
-const Botany = require("../schema/botany");
-const Zoology = require("../schema/zoology");
-const Physics = require("../schema/physics");
-const Chemistry = require("../schema/chemistry");
-const Mat = require("../schema/mat");
 const Admin = require("../schema/admin");
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 

@@ -31,20 +31,12 @@ const customTestSchema = new mongoose.Schema({
         required: true,
     },
     isSponsored: isSponsoredSchema,
-    questiontype: {
+    questionmodel: {
         type: String,
-        enum: ["withid", "withoutid"],
         required: true,
     },
-    questionsIds: [
-        {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Question",
-        },
-    ],
-    questions: {},
+    questionsIds: [{ type: mongoose.Schema.Types.ObjectId }],
     testid: {
-        unique: true,
         type: String,
         required: true,
     },
@@ -63,6 +55,6 @@ const customTestSchema = new mongoose.Schema({
     },
 });
 
-const CustomTest = mongoose.model("customtest", customTestSchema);
+const CustomTest = mongoose.model("CustomTest", customTestSchema);
 
 module.exports = CustomTest;
