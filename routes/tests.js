@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require('mongoose');
 const {
   UNITWEIGHTAGE,
   SUBJECTWEIGHTAGE,
@@ -10,9 +11,13 @@ const DailyTest = require("../schema/dailytest");
 const SpecialSeries = require("../schema/specialseries");
 const CustomTest = require("../schema/customtests");
 const Question = require("../schema/question");
+const OutQuestion = require("../schema/outquestion");
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 const { limitermiddleware } = require("../middlewares/limiter");
 const { checkCompatibility } = require("./addfile")
+const Organization = require("../schema/organization");
+const Analytic = require("../schema/analytic");
+const { getModelBasedOnSubject } = require('../public/utils.js')
 
 const { sendEmail, LOGO_URL } = require("./gmailroute");
 const createTodayDateId = () => {
@@ -337,21 +342,19 @@ router.get(
       test.usersconnected.push(userid);
       const savedest = await test.save();
 
-      const typeofquestions = test.questiontype;
+      const questionmodel = test.questionmodel;
       let questions;
-      if (typeofquestions === 'withid') {
-        const test = await CustomTest.findOne({ testid: testid, type: typeoftest })
-          .populate({
-            path: 'questionsIds',
-            select: '_id question options answer explanation subject chapter mergedunit',
-          })
-          .exec();
-        const ungroupedQuestions = test.questionsIds
-        questions = await groupQuestionsBySubject(ungroupedQuestions);
 
-      } else if (typeofquestions === 'withoutid') {
-        questions = test.questions;
-      }
+      const test2 = await CustomTest.findOne({ testid: testid, type: typeoftest })
+        .populate({
+          path: 'questionsIds',
+          model: questionmodel,
+          select: '_id question options answer explanation subject chapter mergedunit',
+        })
+        .exec();
+      const ungroupedQuestions = test2.questionsIds
+      questions = await groupQuestionsBySubject(ungroupedQuestions);
+
       return res.status(200).json({ questions });
     }
   }
@@ -403,7 +406,7 @@ router.get("/createdailytest", async (req, res) => {
       type: 'dailytest',
       testid: testid,
       questionsIds: idArray,
-      questiontype: 'withid',
+      questiontype: 'Question',
     });
     await customTest.save();
     return res.status(200).json({
@@ -418,45 +421,53 @@ router.get("/createdailytest", async (req, res) => {
   }
 });
 
-router.post('/create-prayash', VerifyUser, async (req, res) => {
+router.post('/create-test', VerifyUser, async (req, res) => {
   try {
     const { name, type, questiontype, questions } = req.body;
     const formattedName = name.replace(/\s+/g, '-');
+    // const testid = formattedName + '-' + createTodayDateId();
     const testid = formattedName
 
     const existingCustomTest = await CustomTest.findOne({ testid, type });
-
     if (existingCustomTest) {
       return res.status(400).json({ message: "Test Series with the same name already exists." });
     }
 
+    let question_ids = questions
     if (questiontype === 'withoutid') {
-      const customTest = new CustomTest({
-        type: type,
-        testid: testid,
-        questions: questions,
-        questiontype: questiontype,
-        isSponsored: {
-          by: formattedName,
-        },
-      });
-      await customTest.save();
+      const flattenedQuestions = [];
+      for (const subject in questions) {
+        const questionsForSubject = questions[subject];
+        flattenedQuestions.push(
+          ...questionsForSubject.map(question => ({
+            ...question,
+            _id: new mongoose.Types.ObjectId(),
+            subject: subject.toLowerCase() // Assuming subject is the name in lowercase
+          }))
+        );
+      }
+
+      const questionIds = await Promise.all(
+        flattenedQuestions.map(async (question) => {
+          const newQuestion = new OutQuestion(question);
+          await newQuestion.save();
+          return newQuestion._id;
+        })
+      );
+      question_ids = questionIds
 
     }
 
-    if (questiontype === 'withid') {
-      const customTest = new CustomTest({
-        type: type,
-        testid: testid,
-        questionsIds: questions,
-        questiontype: questiontype,
-        isSponsored: {
-          by: formattedName,
-        },
-      });
-      await customTest.save();
-
-    }
+    const customTest = new CustomTest({
+      type: type,
+      testid: testid,
+      questionsIds: question_ids,
+      questionmodel: questiontype === 'withid' ? 'Question' : 'Outquestion',
+      isSponsored: {
+        by: formattedName,
+      },
+    });
+    await customTest.save();
 
 
     return res.status(200).json({
