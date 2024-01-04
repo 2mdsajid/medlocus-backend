@@ -11,6 +11,7 @@ const {
 const DailyTest = require("../schema/dailytest");
 const Question = require("../schema/question");
 const Admin = require("../schema/admin");
+const Analytic = require("../schema/analytic");
 
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 
@@ -134,5 +135,38 @@ router.get("/analytics", async (req, res) => {
       .json({ error: "An error occurred while fetching analytics data." });
   }
 });
+
+router.post('/update-test', VerifyUser, async (req, res) => {
+  try {
+    const chapter_scores = req.body.chapter_scores;
+    const userId = req.userId;
+
+    let analytic = await Analytic.findOne({ userid: userId });
+
+    if (!analytic) {
+      analytic = new Analytic({ userid: userId, chapterscores: [{}] });
+    }
+    let old_scores = analytic.chapterscores
+
+    for (const chapterName of Object.keys(chapter_scores)) {
+      if (!old_scores[0][chapterName]) {
+        old_scores[0][chapterName] = [];
+      }
+      old_scores[0][chapterName].push(chapter_scores[chapterName]);
+    }
+
+
+    analytic.chapterscores[0] = old_scores[0]
+    await analytic.save();
+    return res.status(200).json({  message: 'Chapter scores updated successfully.' });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({  message: 'Internal Server Error' });
+  }
+});
+
+
+
 
 module.exports = router;
