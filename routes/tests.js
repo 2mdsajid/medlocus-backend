@@ -671,6 +671,70 @@ router.post("/addusertotest", async (req, res) => {
     savedest,
   });
 });
+// fetch chapters for chapterwise tests
+router.get('/get-chapters', async (req, res) => {
+  try {
+    const { sub } = req.query;
+    if (!sub) {
+      return res.status(400).json({ error: 'Subject not provided' });
+    }
+    const chapters = await Question.distinct('chapter', { subject: sub });
+    const chapterCounts = {};
+    for (const chapter of chapters) {
+      const count = await Question.countDocuments({ subject: sub, chapter });
+      chapterCounts[chapter] = count;
+    }
+    return res.json({ chapters, chapterCounts });
+  } catch (error) {
+    console.error('Error retrieving chapters:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+// get chapters and it number of questions
+router.get('/get-subjects', async (req, res) => {
+  try {
+    const subjects = await Question.distinct('subject');
+    const subjectsWithCount = {};
+
+    for (const subject of subjects) {
+      const count = await Question.countDocuments({ subject });
+      subjectsWithCount[subject] = count;
+    }
+    console.log("🚀 ~ file: tests.js:715 ~ router.get ~ subjectsWithCount:", subjectsWithCount)
+    return res.json(subjectsWithCount);
+  } catch (error) {
+    console.error('Error retrieving subjects with count:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+// fetch sets for pastpapers
+router.get('/get-pastpapers', async (req, res) => {
+  try {
+    const pastYearSets = await CustomTest.find({ type: "pastpaper" })
+      .populate({
+        path: "creator.by",
+        model: "User",
+        select: "name email"
+      })
+      .select('name testid creator.by type')
+      .exec();
+    const categorizedSets = pastYearSets.reduce((acc, set) => {
+      const [affiliation, year] = set.testid.split('-');
+      if (!acc[affiliation]) {
+        acc[affiliation] = [];
+      }
+      acc[affiliation].push({ ...set.toObject(), year });
+      return acc;
+    }, {});
+
+    return res.status(200).json({ ...categorizedSets });
+
+
+  } catch (error) {
+    console.error('Error retrieving chapters:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
 module.createTodayDateId = createTodayDateId;
 module.exports = router;
