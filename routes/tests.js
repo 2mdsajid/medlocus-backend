@@ -439,6 +439,76 @@ router.get("/createdailytest", async (req, res) => {
     });
   }
 });
+// create custom model tests tests -- 
+router.post("/create-custom-modeltest", async (req, res) => {
+  try {
+    const { name, type, num } = req.body;
+
+    let questionsArray = [];
+    const formattedName = name.replace(/\s+/g, '-');
+    const testid = formattedName
+
+    if (!num || !['100','200'].includes(num)) {
+      return res.status(404).send({ message: 'number can be either 100 or 200' });
+    }
+
+    const fraction = parseInt(num) / 200
+    const existingCustomTest = await CustomTest.findOne({ testid, type });
+    if (existingCustomTest) {
+      return res.status(400).json({ message: "Test Series with the same name already exists." });
+    }
+
+
+    for (const category in UNITWEIGHTAGE) {
+      for (const unit in UNITWEIGHTAGE[category]) {
+        const weightage = UNITWEIGHTAGE[category][unit]*fraction
+        const questions = await Question.aggregate([
+          {
+            $match: {
+              mergedunit: unit,
+              "isverified.state": true,
+              "isadded.state": true,
+              "isreported.state": false,
+              "isflagged.state": false,
+            },
+          },
+          { $sample: { size: weightage } },
+          {
+            $project: {
+              _id: 1,
+            },
+          },
+        ]).exec();
+        questionsArray.push(...questions);
+        questions.length === 0 && console.log(unit, questions.length); //console the unit with zero questions fetched
+      }
+    }
+    const idArray = questionsArray.map(question => question._id);
+
+    const customTest = new CustomTest({
+      name: name,
+      type: type,
+      testid: testid,
+      questionmodel: 'Question',
+      questionsIds: idArray,
+      creator: {
+        model: 'User',
+        by: '659a346539a27408c615e708', //replace by the userid of medlocus account
+      },
+    });
+
+    await customTest.save();
+    return res.status(200).json({
+      message: type + " created successfully",
+      testid: testid,
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
 
 router.post('/create-test', VerifyUser, async (req, res) => {
   try {
