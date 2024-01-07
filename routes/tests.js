@@ -84,7 +84,7 @@ router.get(
         });
       }
 
-      if (typeoftest === "unitwise" || typeoftest === "chapterwise") {
+      if (typeoftest === "unitwise") {
         if (!unit || !(unit in UNITWEIGHTAGE[sub])) {
           return res.status(400).json({
             message: "Invalid or missing unit",
@@ -93,14 +93,11 @@ router.get(
       }
 
       if (typeoftest === "chapterwise") {
-        const units = UPDATED_SYLLABUS.subjects
-          .find((s) => s.name === sub)
-          .units.find((s) => s.mergedunit === unit);
         // make sure to revise the chapter
         // chapter coming with ( ) replaced by (-)
         // syllabus has ( ) & database has (-)
         // so matching from the syllabus removing the (-) with ( )
-        if (!chap || !units.topics.includes(chap.replace(/-/g, " "))) {
+        if (!chap) {
           return res.status(400).json({
             message: "Invalid or missing chapter",
           });
@@ -154,10 +151,10 @@ router.get(
           message: "no questions from this subject",
         });
       }
-      const groupedQuestions = await groupQuestionsBySubject(questions);
+      // const groupedQuestions = await groupQuestionsBySubject(questions);
       return res.status(200).json({
         message: "Chapter questions founddddd",
-        questions: groupedQuestions,
+        questions: questions,
       });
     }
     ///* UNIT WISE */-------------------------------
