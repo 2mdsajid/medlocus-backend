@@ -30,15 +30,17 @@ const createTodayDateId = () => {
 };
 
 const groupQuestionsBySubject = async (questions) => {
-  const questionarray = {};
-
-  for (const subject of Object.keys(SUBJECTWEIGHTAGE)) {
-    questionarray[subject] = questions.filter(
-      (question) => question.subject === subject
-    );
+  const questionArray = {};
+  for (const question of questions) {
+    const subject = question.subject || 'combined';
+    if (!questionArray[subject]) {
+      questionArray[subject] = [];
+    }
+    questionArray[subject].push(question);
   }
-  return questionarray;
+  return questionArray;
 };
+
 
 router.get(
   "/testquestions/:typeoftest",
@@ -48,7 +50,8 @@ router.get(
     const { typeoftest } = req.params;
     const numberofquestions = parseInt(num);
 
-    let testid = req.query.testid;
+    let testid = req.query.testid !== 'undefined' ? req.query.testid : null;
+
     if (typeoftest === 'dailytest') {
       testid = createTodayDateId();
     }
@@ -183,22 +186,15 @@ router.get(
             _id: 1,
           },
         },
-        {
-          $set: {
-            uans: "",
-            timetaken: 0,
-          },
-        },
       ]).exec();
       if (questions.length === 0) {
         return res.status(400).json({
           message: "No questions found",
         });
       }
-      const groupedQuestions = await groupQuestionsBySubject(questions);
       return res.status(200).json({
         message: "unit questions founddddd",
-        questions: groupedQuestions,
+        questions: questions,
       });
     }
     // /* CHAPTERWISE------------------------------------------------------ */
@@ -207,7 +203,6 @@ router.get(
         {
           $match: {
             subject: sub,
-            mergedunit: unit,
             chapter: chap,
             "isverified.state": true,
             "isadded.state": true,
@@ -240,10 +235,9 @@ router.get(
           message: "No questions found",
         });
       }
-      const groupedQuestions = await groupQuestionsBySubject(questions);
       return res.status(200).json({
         message: "unit questions founddddd",
-        questions: groupedQuestions,
+        questions: questions,
       });
     }
     // /* MODEL TEST ---------------------------------- */
