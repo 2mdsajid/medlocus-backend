@@ -351,13 +351,14 @@ router.get(
   }
 );
 
+// create daily and weekly tests -- for cron jobs
 router.get("/createdailytest", async (req, res) => {
   try {
     let questionsArray = [];
     const testid = createTodayDateId();
 
     const type = req.query.t
-    if (!['dailytest'].includes(type)) {
+    if (!['dailytest', 'weeklytest'].includes(type)) {
       return res.status(404).send({ message: "unknown type" })
     }
 
@@ -366,21 +367,20 @@ router.get("/createdailytest", async (req, res) => {
       return res.status(400).json({ message: "Test with the same name already exists." });
     }
 
-    // Iterate through the UNITWEIGHTAGE object
     for (const category in UNITWEIGHTAGE) {
-      for (const unit in UNITWEIGHTAGE[category]) {
-        const weightage = UNITWEIGHTAGE[category][unit];
+      if (type === 'dailytest') {
+        // to fetch 10 questions from eaxh subject, as units failed 
         const questions = await Question.aggregate([
           {
             $match: {
-              mergedunit: unit,
+              subject: category,
               "isverified.state": true,
               "isadded.state": true,
               "isreported.state": false,
               "isflagged.state": false,
             },
           },
-          { $sample: { size: weightage } },
+          { $sample: { size: 10 } },
           {
             $project: {
               _id: 1,
@@ -388,20 +388,48 @@ router.get("/createdailytest", async (req, res) => {
           },
         ]).exec();
         questionsArray.push(...questions);
-        questions.length === 0 && console.log(unit, questions.length); //console the unit with zero questions fetched
+      } else {
+        // to get from each unit for 200 questions
+        for (const unit in UNITWEIGHTAGE[category]) {
+          const weightage = UNITWEIGHTAGE[category][unit]
+          const questions = await Question.aggregate([
+            {
+              $match: {
+                mergedunit: unit,
+                "isverified.state": true,
+                "isadded.state": true,
+                "isreported.state": false,
+                "isflagged.state": false,
+              },
+            },
+            { $sample: { size: weightage } },
+            {
+              $project: {
+                _id: 1,
+              },
+            },
+          ]).exec();
+          questionsArray.push(...questions);
+          questions.length === 0 && console.log(unit, questions.length); //console the unit with zero questions fetched
+        }
       }
     }
     const idArray = questionsArray.map(question => question._id);
 
     const customTest = new CustomTest({
-      type: 'dailytest',
+      name: type === 'dailytest' ? 'Daily Test' : 'Weekly Test',
+      type: type,
       testid: testid,
+      questionmodel: 'Question',
       questionsIds: idArray,
-      questiontype: 'Question',
+      creator: {
+        model: 'User',
+        by: '659a346539a27408c615e708', //replace by the userid of medlocus account
+      },
     });
     await customTest.save();
     return res.status(200).json({
-      message: "Daily test created successfully",
+      message: type + " created successfully",
       dailytest: idArray.length,
     });
 
