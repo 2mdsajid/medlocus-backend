@@ -241,36 +241,15 @@ router.get(
       });
     }
     // /* MODEL TEST ---------------------------------- */
-    else if (typeoftest === "modeltest") {
-      if (![50, 100, 150, 200].includes(numberofquestions)) {
-        return res.status(400).json({
-          message: "number of questions not matched or unusual",
-          status: 300,
-        });
-      }
-      const fraction = 100 / 200;
+    else if (typeoftest === "modeltest" && [50, 100, 150, 200].includes(numberofquestions)) {
+      const fraction = numberofquestions / 200;
       const subjectKeys = Object.keys(SUBJECTWEIGHTAGE);
       const questions = [];
-
       for (const subject of subjectKeys) {
-        const SubjectModel = getModelBasedOnSubject(subject);
-        const numberOfQuestions = Math.ceil(
-          SUBJECTWEIGHTAGE[subject] * fraction
-        );
-        const totalQuestionsInModel = await SubjectModel.countDocuments();
-
-        const questionsToFetch = Math.min(
-          numberOfQuestions,
-          totalQuestionsInModel
-        );
         const selectedquestions = await Question.aggregate([
           {
             $match: {
               subject: subject,
-              "isverified.state": true,
-              "isadded.state": true,
-              "isreported.state": false,
-              "isflagged.state": false,
             },
           },
           { $sample: { size: SUBJECTWEIGHTAGE[subject] * fraction } },
@@ -286,27 +265,10 @@ router.get(
               _id: 1,
             },
           },
-          {
-            $set: {
-              uans: "",
-              timetaken: 0,
-            },
-          },
         ]).exec();
-
-        // const questionIds = populatedQuestions.map((item) => item.questionid);
         questions.push(...selectedquestions);
       }
-
-      if (questions.length > numberofquestions) {
-        questions.pop();
-      }
-
-      const groupedQuestions = await groupQuestionsBySubject(questions);
-      return res.status(200).json({
-        message: "model questions found",
-        questions: groupedQuestions,
-      });
+      return res.status(200).json({questions});
     }
 
     // fetch tests by their ids -- incase the above did not work
