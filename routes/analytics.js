@@ -11,6 +11,7 @@ const {
 const DailyTest = require("../schema/dailytest");
 const Question = require("../schema/question");
 const Admin = require("../schema/admin");
+const User = require("../schema/user");
 const Analytic = require("../schema/analytic");
 
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
@@ -145,6 +146,9 @@ router.post('/update-test', VerifyUser, async (req, res) => {
 
     if (!analytic) {
       analytic = new Analytic({ userid: userId, chapterscores: [{}] });
+      const user = await User.findOne({ userid: userId });
+      user.analytic = analytic._id
+      await user.save();
     }
     let old_scores = analytic.chapterscores
 
@@ -158,11 +162,11 @@ router.post('/update-test', VerifyUser, async (req, res) => {
 
     analytic.chapterscores[0] = old_scores[0]
     await analytic.save();
-    return res.status(200).json({  message: 'Chapter scores updated successfully.' });
+    return res.status(200).json({ message: 'Chapter scores updated successfully.' });
 
   } catch (error) {
     console.error(error);
-    return res.status(500).json({  message: 'Internal Server Error' });
+    return res.status(500).json({ message: 'Internal Server Error' });
   }
 });
 
