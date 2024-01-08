@@ -40,12 +40,23 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Note"
   }],
+  organizations: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Organization"
+  }],
+  analytic: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Analytic"
+  },
   isModerator: {
     type: Boolean,
     default: false
   },
   payment: {
-    isPaid: { type: Boolean, default: false },
+    isPaid: {
+      type: Boolean,
+      default: false
+    },
     method: {
       type: String,
       enum: ["organization", "premium", null],
