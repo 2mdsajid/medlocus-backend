@@ -818,27 +818,57 @@ router.get('/get-mergedunits', async (req, res) => {
 });
 
 // fetch sets for pastpapers
-router.get('/get-pastpapers', async (req, res) => {
+router.get('/get-pastpapers/:affiliation', async (req, res) => {
   try {
-    const pastYearSets = await CustomTest.find({ type: "pastpaper" })
-      .populate({
-        path: "creator.by",
-        model: "User",
-        select: "name email"
-      })
-      .select('name testid creator.by type')
+    const affiliation = req.params.affiliation
+    if (!affiliation) return res.status(400).json({ message: 'Missing affiliation' });
+    const pastYearSets = await CustomTest.find({ type: "pastpapers" })
+      .select('name testid type')
       .exec();
-    const categorizedSets = pastYearSets.reduce((acc, set) => {
-      const [affiliation, year] = set.testid.split('-');
-      if (!acc[affiliation]) {
-        acc[affiliation] = [];
-      }
-      acc[affiliation].push({ ...set.toObject(), year });
+
+    const filteredSets = pastYearSets.filter(set => {
+      const [setAffiliation] = set.testid.split('-');
+      return setAffiliation === affiliation;
+    });
+
+
+    // const categorizedSets = pastYearSets.reduce((acc, set) => {
+    //   const [affiliation, year] = set.testid.split('-');
+    //   if (!acc[affiliation]) {
+    //     acc[affiliation] = [];
+    //   }
+    //   acc[affiliation].push({ ...set.toObject(), year });
+    //   return acc;
+    // }, {});
+
+    return res.status(200).json(filteredSets);
+
+
+  } catch (error) {
+    console.error('Error retrieving chapters:', error);
+    return res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+router.get('/get-pastpapers-count', async (req, res) => {
+  try {
+    const pastYearSets = await CustomTest.find({ type: "pastpapers" })
+      .select('testid')
+      .exec();
+
+    // Count occurrences of unique testid[0]
+    const countMap = pastYearSets.reduce((acc, set) => {
+      const firstChar = set.testid.split('-')[0];
+      acc[firstChar] = (acc[firstChar] || 0) + 1;
       return acc;
     }, {});
 
-    return res.status(200).json({ ...categorizedSets });
-
+    return res.status(200).json(countMap);
+  } catch (error) {
+    console.error('Error retrieving pastpapers count:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
   } catch (error) {
     console.error('Error retrieving chapters:', error);
