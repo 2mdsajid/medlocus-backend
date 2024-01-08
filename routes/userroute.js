@@ -151,4 +151,107 @@ router.post("/add-nonuser", async (req, res) => {
   }
 });
 
+// create an organization
+router.post('/create-organization', VerifyUser, async (req, res) => {
+  try {
+    const { name, uniqueId } = req.body;
+    const createdBy = req.userId
+    if (!name || !uniqueId) {
+      return res.status(400).json({ message: 'Missing parameters' });
+    }
+
+    const existingOrganization = await Organization.findOne({ uniqueId });
+    if (existingOrganization) {
+      return res.status(400).json({ message: 'Organization with this uniqueId already exists' });
+    }
+
+    const newOrganization = new Organization({
+      createdBy,
+      name,
+      uniqueId,
+      image: '',
+      moderators: [createdBy],
+    });
+
+    await newOrganization.save();
+    return res.status(201).json({ organizationId: newOrganization._id });
+
+  } catch (error) {
+    console.error('Error creating organization:', error.message);
+    return res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// join an org
+router.get('/join-org/:orgid', VerifyUser, async (req, res) => {
+  try {
+    const accessToken = req.params.orgid;
+    const userid = req.userId
+    if (!accessToken) {
+      return res.status(400).json({ message: 'Invalid ref token' })
+    }
+
+    const [orgId, userKey] = accessToken.split('-');
+    const organization = await Organization.findById(orgId);
+    if (!organization) return res.status(404).json({ message: 'Organization not found.' });
+
+    const keyType = organization.keys.moderator === userKey ? 'moderators' : organization.keys.user === userKey ? 'users' : null;
+    if (!keyType) return res.status(400).json({ message: 'Invalid key.' });
+    if (organization[keyType].includes(userid)) return res.status(400).json({ message: `User already exists in the organization as ${keyType}.` });
+
+    organization[keyType].push(userid);
+    await organization.save();
+
+    const user = await User.findById(userid)
+    user.organizations.push(orgId);
+    await user.save();
+    
+    return res.status(200).json({
+      message: `successfully joined ${organization.name} as ${keyType}.`
+    })
+
+  } catch (error) {
+    console.error('Error adding user to organization:', error.message);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// get all organization associated - created by a user
+router.get('/get-organizations/', VerifyUser, async (req, res) => {
+  try {
+    const userid = req.userId;
+
+    const organizations = await Organization
+      .find({ createdBy: userid })
+      .populate({
+        path: 'createdBy',
+        select: 'name',
+      });
+
+    if (!organizations || organizations.length === 0) {
+      return res.status(404).json({ message: 'Organizations not found' });
+    }
+
+    const cleanedOrganizations = organizations.map(org => ({
+      name: org.name,
+      uniqueId: org.uniqueId,
+      createdBy: org.createdBy.name,
+      usersCount: org.users.length,
+      testsCount: org.tests.length,
+      moderatorsCount: org.moderators.length,
+      keys: {
+        moderator: org.keys.moderator,
+        user: org.keys.user,
+      },
+      _id: org._id,
+      date: org.date
+    }));
+    res.status(200).json(cleanedOrganizations);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
 module.exports = router;
