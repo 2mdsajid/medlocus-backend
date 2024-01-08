@@ -797,6 +797,26 @@ router.get('/get-subjects', async (req, res) => {
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
+// Fetch merged units for merged unitwise tests using aggregation pipeline
+router.get('/get-mergedunits', async (req, res) => {
+  try {
+    const { sub } = req.query;
+    if (!sub) {
+      return res.status(400).json({ error: 'Subject not provided' });
+    }
+    const mergedUnitCounts = await Question.aggregate([
+      { $match: { subject: sub } },
+      { $group: { _id: '$mergedunit', count: { $sum: 1 } } },
+      { $project: { _id: 0, name: '$_id', count: 1 } }
+    ]);
+    return res.json(mergedUnitCounts);
+  } catch (error) {
+    console.error('Error retrieving merged units:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 // fetch sets for pastpapers
 router.get('/get-pastpapers', async (req, res) => {
   try {
