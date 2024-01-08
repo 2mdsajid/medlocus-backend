@@ -255,8 +255,12 @@ router.get('/join-org/:orgid', VerifyUser, async (req, res) => {
 
     const user = await User.findById(userid)
     user.organizations.push(orgId);
+    user.payment = {
+      isPaid: true,
+      method: 'organization'
+    }
     await user.save();
-    
+
     return res.status(200).json({
       message: `successfully joined ${organization.name} as ${keyType}.`
     })
@@ -304,5 +308,36 @@ router.get('/get-organizations/', VerifyUser, async (req, res) => {
   }
 });
 
+
+router.get('/get-organization/:organizationid', VerifyUser, async (req, res) => {
+  try {
+    const { organizationid } = req.params;
+    if (!organizationid) return res.status(404).json({ message: 'your organization id is missing' });
+
+    const organization = await Organization
+      .findById(organizationid)
+      .populate({
+        path: 'users',
+        select: 'name email image',
+      })
+      .populate({
+        path: 'moderators createdBy',
+        select: 'name email image',
+      })
+      .populate({
+        path: 'tests',
+        select: 'testid date',
+      })
+      .exec();
+    if (!organization) {
+      return res.status(404).json({ message: 'Organization not found' });
+    }
+
+    res.json(organization);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
 
 module.exports = router;
