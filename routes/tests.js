@@ -768,29 +768,26 @@ router.get('/get-chapters', async (req, res) => {
     if (!sub) {
       return res.status(400).json({ error: 'Subject not provided' });
     }
-    const chapters = await Question.distinct('chapter', { subject: sub });
-    const chapterCounts = {};
-    for (const chapter of chapters) {
-      const count = await Question.countDocuments({ subject: sub, chapter });
-      chapterCounts[chapter] = count;
-    }
-    return res.json({ chapters, chapterCounts });
+    const chapterCounts = await Question.aggregate([
+      { $match: { subject: sub } },
+      { $group: { _id: '$chapter', count: { $sum: 1 } } },
+      { $project: { _id: 0, name: '$_id', count: 1 } }
+    ]);
+    return res.json(chapterCounts);
   } catch (error) {
     console.error('Error retrieving chapters:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
+
 // get chapters and it number of questions
 router.get('/get-subjects', async (req, res) => {
   try {
-    const subjects = await Question.distinct('subject');
-    const subjectsWithCount = {};
-
-    for (const subject of subjects) {
-      const count = await Question.countDocuments({ subject });
-      subjectsWithCount[subject] = count;
-    }
-    console.log("🚀 ~ file: tests.js:715 ~ router.get ~ subjectsWithCount:", subjectsWithCount)
+    const subjectsWithCount = await Question.aggregate([
+      { $group: { _id: '$subject', count: { $sum: 1 } } },
+      { $project: { _id: 0, name: '$_id', count: 1 } }
+    ]);
     return res.json(subjectsWithCount);
   } catch (error) {
     console.error('Error retrieving subjects with count:', error);
@@ -816,6 +813,10 @@ router.get('/get-mergedunits', async (req, res) => {
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
+// 
+
+
 
 // fetch sets for pastpapers
 router.get('/get-pastpapers/:affiliation', async (req, res) => {
