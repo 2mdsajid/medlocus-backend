@@ -85,6 +85,49 @@ router.get("/user", VerifyUser, async (req, res) => {
   }
 });
 
+// fhgjhk
+router.get("/get-anal", VerifyUser, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const userAnalytic = await Analytic.findOne({ userid: userId });
+
+    if (!userAnalytic) return res.status(404).json({ message: "User not found" });
+
+    const chapterscores = userAnalytic.chapterscores[0];
+    const chapterNames = Object.keys(chapterscores);
+
+    const totalScores = chapterNames.map((chapter) => {
+      const chapterData = chapterscores[chapter];
+      const totalCorrect = chapterData.reduce((sum, entry) => sum + entry.c, 0);
+      const totalTotal = chapterData.reduce((sum, entry) => sum + entry.t, 0);
+
+      const score = ((totalCorrect / totalTotal) * 100).toFixed(2);
+      return {
+        chapter,
+        correct: totalCorrect,
+        total: totalTotal,
+        score: isNaN(score) ? 0 : score, // To handle division by zero scenarios
+      };
+    });
+
+    const user = await User.findOne({ _id: userId })
+      .populate({
+        path: 'questions',
+        select: 'question isverified.state isverified.message'
+      })
+      .select('question')
+      .exec()
+
+    const questionsReported = user.questions
+    return res.status(200).json({ chapterScores: totalScores, questionsReported });
+  } catch (error) {
+    console.error("Error calculating total score:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+
+
 // for non logged users
 router.post("/add-nonuser", async (req, res) => {
   try {
