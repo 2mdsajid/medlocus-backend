@@ -343,6 +343,11 @@ router.post("/reportquestion", VerifyUser, async (req, res) => {
     question.isreported.message = message;
     question.isverified.state = false;
     await question.save();
+    const user = await User.findOne({ _id: userid })
+    user.questions.push(questionid)
+    await user.save();
+    console.log("🚀 ~ file: questionroute.js:351 ~ router.post ~ user:", user)
+
     return res.status(200).json({
       message: "Question reported successfully",
       questionid: question._id,
