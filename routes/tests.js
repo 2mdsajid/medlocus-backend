@@ -722,6 +722,45 @@ router.post("/addusertotest", async (req, res) => {
     savedest,
   });
 });
+
+// fetch custom tests
+router.get('/get-custom-tests/:typeoftest', async (req, res) => {
+  try {
+    const { typeoftest } = req.params
+
+    const customTests = await CustomTest.find({ type: typeoftest })
+      .populate({
+        path: "creator.by",
+        model: "User",
+        select: "name email"
+      })
+      .select('name testid creator.by questionsIds type date')
+      .exec();
+
+    if (customTests.length == 0) {
+      return res.status(300).json({ message: 'No test available' })
+    }
+
+    const modifiedCustomTests = customTests.map(test => ({
+      name: test.name,
+      testid: test.testid,
+      creator: {
+        _id: test.creator._id,
+        name: test.creator.by.name,
+      },
+      numberOfQuestions: test.questionsIds.length,
+      type: test.type,
+      date: test.date,
+    }));
+
+    return res.status(200).json(modifiedCustomTests)
+
+  } catch (error) {
+    console.error('Error retrieving chapters:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 // fetch chapters for chapterwise tests
 router.get('/get-chapters', async (req, res) => {
   try {
