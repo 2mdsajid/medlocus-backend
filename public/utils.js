@@ -10,5 +10,17 @@ const generateVerificationKey = (length) => {
     return key;
 };
 
+const groupQuestionsBySubject = async (questions) => {
+    const questionArray = {};
+    for (const question of questions) {
+      const subject = question.subject || 'combined';
+      if (!questionArray[subject]) {
+        questionArray[subject] = [];
+      }
+      questionArray[subject].push(question);
+    }
+    return questionArray;
+  };
 
-module.exports = { generateVerificationKey }
+
+module.exports = { generateVerificationKey,groupQuestionsBySubject }

@@ -401,40 +401,127 @@ router.get("/createdailytest", async (req, res) => {
     });
   }
 });
-// create custom model tests tests -- 
-router.post("/create-custom-modeltest", async (req, res) => {
+
+// fetch questions for custom model tests
+router.get("/get-questions-for-modeltest", VerifyUser, async (req, res) => {
   try {
-    const { name, type, num } = req.body;
+    const { num } = req.query;
 
     let questionsArray = [];
-    const formattedName = name.replace(/\s+/g, '-');
-    const testid = formattedName
+    const userid = req.userId
 
-    if (!num || !['100','200'].includes(num)) {
+    if (!num || !['50', '75', '100', '125', '150', '175', '200'].includes(num)) {
       return res.status(404).send({ message: 'number can be either 100 or 200' });
     }
 
-    const fraction = parseInt(num) / 200
-    const existingCustomTest = await CustomTest.findOne({ testid, type });
-    if (existingCustomTest) {
-      return res.status(400).json({ message: "Test Series with the same name already exists." });
-    }
-
-
-    for (const category in UNITWEIGHTAGE) {
-      for (const unit in UNITWEIGHTAGE[category]) {
-        const weightage = UNITWEIGHTAGE[category][unit]*fraction
+    const number = parseInt(num)
+    const fraction = number / 200
+    for (const category in SUBJECTWEIGHTAGE) {
+      if ([50, 75, 100, 125, 150, 175].includes(number)) {
+        // to fetch 10 questions from eaxh subject, as units failed 
         const questions = await Question.aggregate([
           {
             $match: {
-              mergedunit: unit,
+              subject: category,
               "isverified.state": true,
               "isadded.state": true,
               "isreported.state": false,
               "isflagged.state": false,
             },
           },
-          { $sample: { size: weightage } },
+          { $sample: { size: SUBJECTWEIGHTAGE[category] * fraction } },
+          {
+            $project: {
+              _id: 1,
+              question: 1,
+              options: 1,
+              answer: 1,
+              explanation: 1,
+              images: 1,
+              subject: 1,
+            },
+          },
+        ]).exec();
+        questionsArray.push(...questions);
+      } else {
+        // to get from each unit for 200 questions
+        for (const unit in UNITWEIGHTAGE[category]) {
+          const weightage = UNITWEIGHTAGE[category][unit]
+          const questions = await Question.aggregate([
+            {
+              $match: {
+                mergedunit: unit,
+                "isverified.state": true,
+                "isadded.state": true,
+                "isreported.state": false,
+                "isflagged.state": false,
+              },
+            },
+            { $sample: { size: weightage } },
+            {
+              $project: {
+                _id: 1,
+                question: 1,
+                options: 1,
+                answer: 1,
+                explanation: 1,
+                images: 1,
+                subject: 1,
+              },
+            },
+          ]).exec();
+          questionsArray.push(...questions);
+          questions.length === 0 && console.log(unit, questions.length); //console the unit with zero questions fetched
+        }
+      }
+    }
+
+    const groupedQuestions = await groupQuestionsBySubject(questionsArray)
+    return res.status(200).json(groupedQuestions);
+
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+
+
+// create custom model tests tests -- 
+router.post("/create-custom-modeltest", VerifyUser, async (req, res) => {
+  try {
+    const { name, type, num, username, isOrg } = req.body;
+
+    let questionsArray = [];
+    const formattedName = name.replace(/\s+/g, '-');
+    const testid = formattedName
+    const userid = req.userId
+
+    if (!num || !['50', '75', '100', '125', '150', '175', '200'].includes(num)) {
+      return res.status(404).send({ message: 'number can be either 100 or 200' });
+    }
+
+    const number = parseInt(num)
+    const existingCustomTest = await CustomTest.findOne({ testid, type });
+    if (existingCustomTest) {
+      return res.status(400).json({ message: "Test Series with the same name already exists." });
+    }
+
+    const fraction = number / 200
+    for (const category in SUBJECTWEIGHTAGE) {
+      if ([50, 75, 100, 125, 150, 175].includes(number)) {
+        // to fetch 10 questions from eaxh subject, as units failed 
+        const questions = await Question.aggregate([
+          {
+            $match: {
+              subject: category,
+              "isverified.state": true,
+              "isadded.state": true,
+              "isreported.state": false,
+              "isflagged.state": false,
+            },
+          },
+          { $sample: { size: SUBJECTWEIGHTAGE[category] * fraction } },
           {
             $project: {
               _id: 1,
@@ -442,27 +529,56 @@ router.post("/create-custom-modeltest", async (req, res) => {
           },
         ]).exec();
         questionsArray.push(...questions);
-        questions.length === 0 && console.log(unit, questions.length); //console the unit with zero questions fetched
+      } else {
+        // to get from each unit for 200 questions
+        for (const unit in UNITWEIGHTAGE[category]) {
+          const weightage = UNITWEIGHTAGE[category][unit]
+          const questions = await Question.aggregate([
+            {
+              $match: {
+                mergedunit: unit,
+                "isverified.state": true,
+                "isadded.state": true,
+                "isreported.state": false,
+                "isflagged.state": false,
+              },
+            },
+            { $sample: { size: weightage } },
+            {
+              $project: {
+                _id: 1,
+              },
+            },
+          ]).exec();
+          questionsArray.push(...questions);
+          questions.length === 0 && console.log(unit, questions.length); //console the unit with zero questions fetched
+        }
       }
     }
+
     const idArray = questionsArray.map(question => question._id);
 
     const customTest = new CustomTest({
-      name: name,
       type: type,
-      testid: testid,
+      name: name,
+      createdBy: userid,
+      isOrg: isOrg | { state: false },
       questionmodel: 'Question',
       questionsIds: idArray,
-      creator: {
-        model: 'User',
-        by: '659a346539a27408c615e708', //replace by the userid of medlocus account
-      },
+      testid: testid,
     });
 
     await customTest.save();
+
+    if (isOrg && isOrg.state === true) {
+      const organization = await Organization.findById(isOrg.by)
+      organization.tests.push(customTest._id);
+      await organization.save();
+    }
+
     return res.status(200).json({
       message: type + " created successfully",
-      testid: testid,
+      url: `${process.env.FRONTEND}/tests/${type}?by=${username.replace(/\s+/g, '-')}&testid=${testid}`,
     });
 
   } catch (error) {

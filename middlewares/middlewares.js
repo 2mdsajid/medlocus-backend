@@ -79,6 +79,7 @@ const VerifyUser = async (req, res, next) => {
 
     req.userId = user._id;
     req.role = user.role;
+    req.user = user
     next();
 
   } catch (error) {
