@@ -13,6 +13,7 @@ const Question = require("../schema/question");
 const Admin = require("../schema/admin");
 const User = require("../schema/user");
 const Analytic = require("../schema/analytic");
+const CustomTest = require("../schema/customtests");
 
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 
@@ -139,7 +140,7 @@ router.get("/analytics", async (req, res) => {
 
 router.post('/update-test', VerifyUser, async (req, res) => {
   try {
-    const chapter_scores = req.body.chapter_scores;
+    const { typeoftest, testid, chapter_scores, combined_score, incorrectAttempt } = req.body;
     const userId = req.userId;
 
     let analytic = await Analytic.findOne({ userid: userId });
@@ -150,17 +151,38 @@ router.post('/update-test', VerifyUser, async (req, res) => {
       user.analytic = analytic._id
       await user.save();
     }
-    let old_scores = analytic.chapterscores
 
+    // SAVING THE CHAPTERWISE ANALYTICS -- EVERY USERS
+    let old_scores = analytic.chapterscores
     for (const chapterName of Object.keys(chapter_scores)) {
       if (!old_scores[0][chapterName]) {
         old_scores[0][chapterName] = [];
       }
       old_scores[0][chapterName].push(chapter_scores[chapterName]);
     }
-
-
     analytic.chapterscores[0] = old_scores[0]
+
+    // INCORRECT AND OTHER TESTS DATA -- FOR PAID USERS ONLY
+    const user = req.user
+    if (user.payment.isPaid) {
+      // storing incorrect questions ids
+      const newIncorrectAttempts = incorrectAttempt.filter(id => !analytic.incorrect.includes(id));
+      analytic.incorrect.push(...newIncorrectAttempts);
+
+      // storing custom test
+      const existingTest = await CustomTest.findOne({
+        typeoftest,
+        testid
+      })
+      if (existingTest) {
+        analytic.tests.push({
+          test: existingTest._id,
+          ...combined_score,
+        })
+      }
+
+    }
+
     await analytic.save();
     return res.status(200).json({ message: 'Chapter scores updated successfully.' });
 
