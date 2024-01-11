@@ -90,6 +90,16 @@ router.get("/get-anal", VerifyUser, async (req, res) => {
   try {
     const userId = req.userId;
     const userAnalytic = await Analytic.findOne({ userid: userId });
+// get anal of a user by themselves
+router.get("/get-anal", VerifyUser, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const userAnalytic = await Analytic.findOne({ userid: userId })
+      .populate({
+        path: 'tests.test',
+        select: '_id name type'
+      })
+      .exec()
 
     if (!userAnalytic) return res.status(404).json({ message: "User not found" });
 
@@ -110,6 +120,15 @@ router.get("/get-anal", VerifyUser, async (req, res) => {
       };
     });
 
+
+    const processedTestsData = userAnalytic.tests.map(test => ({
+      score: `${test.score.c}/${test.score.t}`,
+      name: test.test.name,
+      type: test.test.type,
+      _id: test.test._id,
+      timetaken: `${test.timetaken.t} (${test.timetaken.a} av)`
+    }));
+
     const user = await User.findOne({ _id: userId })
       .populate({
         path: 'questions',
@@ -118,8 +137,9 @@ router.get("/get-anal", VerifyUser, async (req, res) => {
       .select('question')
       .exec()
 
+
     const questionsReported = user.questions
-    return res.status(200).json({ chapterScores: totalScores, questionsReported });
+    return res.status(200).json({ chapterScores: totalScores, questionsReported,  processedTestsData });
   } catch (error) {
     console.error("Error calculating total score:", error);
     return res.status(500).json({ message: "Internal Server Error" });
