@@ -140,7 +140,7 @@ router.get("/analytics", async (req, res) => {
 
 router.post('/update-test', VerifyUser, async (req, res) => {
   try {
-    const { typeoftest, testid, chapter_scores, combined_score, incorrectAttempt } = req.body;
+    const { typeoftest, testid, chapter_scores, combined_score, incorrectAttempt,score_card } = req.body;
     const userId = req.userId;
 
     let analytic = await Analytic.findOne({ userid: userId });
@@ -179,8 +179,9 @@ router.post('/update-test', VerifyUser, async (req, res) => {
           test: existingTest._id,
           ...combined_score,
         })
+        existingTest.usersattended.push(score_card)
+        await existingTest.save()
       }
-
     }
 
     await analytic.save();
@@ -191,6 +192,31 @@ router.post('/update-test', VerifyUser, async (req, res) => {
     return res.status(500).json({ message: 'Internal Server Error' });
   }
 });
+
+// this is an open route for everyone, user or non user
+router.post('add-to-leaderboard', async (req, res) => {
+  try {
+    const { typeoftest, testid, score_card } = req.body;
+    if (!testid || !typeoftest || !score_card) {
+      return res.status(404).json({ message: 'Unable to add to leaderboard' });
+    }
+    const existingTest = await CustomTest.findOne({
+      typeoftest,
+      testid
+    })
+    if (!existingTest) {
+      return res.status(404).json({ message: 'unable to find test' });
+    }
+    existingTest.usersattended.push(score_card)
+    await CustomTest.save()
+    return res.status(200).json({ message: 'added successgully' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Internal Server Error' });
+
+  }
+
+})
 
 
 

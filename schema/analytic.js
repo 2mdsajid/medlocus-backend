@@ -15,34 +15,12 @@ const analyticSchema = new mongoose.Schema({
     tests: [{
         test: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "CustomTest",
+            ref: "Customtest",
         },
         score: {
-            p: {
-                t: Score, //total
-                c: Score, //correct
-                i: Score, //incorrect
-            },
-            c: {
-                t: Score,
-                c: Score,
-                i: Score,
-            },
-            b: {
-                t: Score,
-                c: Score,
-                i: Score,
-            },
-            z: {
-                t: Score,
-                c: Score,
-                i: Score,
-            },
-            m: {
-                t: Score,
-                c: Score,
-                i: Score,
-            }
+            t: Score,
+            c: Score,
+            i: Score,
         },
         timetaken: {
             t: Score, //total time taken
@@ -61,9 +39,12 @@ const analyticSchema = new mongoose.Schema({
             default: Date.now
         },
     }],
-    chapterscores:[] //coz i cant append or modify an object containing the k, v pairs
+    chapterscores: [], //coz i cant append or modify an object containing the k, v pairs
+    incorrect: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Question'
+    }]
 });
 
 const Analytic = mongoose.model("Analytic", analyticSchema);
-
 module.exports = Analytic;
