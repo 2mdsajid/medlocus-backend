@@ -738,20 +738,40 @@ router.get("/getdailytests/:typeoftest",VerifyUser, async (req, res) => {
         .limit(4)
         .exec();
 
-      testQuestions = test.questionsIds;
+// to retrive tests for tests as well as preview before test
+// for results
+router.get('/get-customtest/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    const test = await CustomTest.findById(id)
+    if (!test) {
+      return res.status(300).json({ message: 'No test available' })
     }
 
-    if (typeofquestions === 'withoutid') {
-      const { physics, chemistry, botany, zoology, mat } = test.questions
-      testQuestions = [...zoology, ...botany, ...chemistry, ...physics, ...mat]
+    const customTest = await CustomTest.findById(id)
+      .populate({
+        path: "questionsIds",
+        model: test.questionmodel,
+        select: "question options answer explanation images"
+      })
+      .select('usersattended questionsIds')
+      .exec();
+
+    customTest.usersattended.sort((a, b) => b.totalscore - a.totalscore);
+    let users = []
+
+    let rank = 1;
+    for (const user of customTest.usersattended) {
+      users.push({
+        userid: user.userid,
+        totalscore: user.totalscore,
+        name: user.name,
+        rank: rank,
+      })
+      rank++;
     }
 
-
-    return res.status(200).json({
-      message: "Test fetched",
-      test,
-      questions: testQuestions,
-    });
+    return res.status(200).json({ questions: customTest.questionsIds, users })
 
   } catch (error) {
     console.error("Error in getdailytests route:", error);
