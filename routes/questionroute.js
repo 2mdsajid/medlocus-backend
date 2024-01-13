@@ -482,7 +482,7 @@ router.get('/get-chapters', async (req, res) => {
 
 router.get('/importquestions', VerifyAdmin, async (req, res) => {
   const { sub, chap, unit, iyq } = req.query;
-  const userid = req.user.id
+  const uuid = req.user.uuid
   let questions
   if (iyq === 'true') {
     questions = await Question.aggregate([
@@ -495,7 +495,7 @@ router.get('/importquestions', VerifyAdmin, async (req, res) => {
           "isadded.state": true,
           "isreported.state": false,
           "isflagged.state": false,
-          "isadded.by": userid,
+          "isadded.by": uuid,
         },
       },
       {
