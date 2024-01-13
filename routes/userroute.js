@@ -273,13 +273,15 @@ router.get('/join-org/:orgid', VerifyUser, async (req, res) => {
     organization[keyType].push(userid);
     await organization.save();
 
-    const user = await User.findById(userid)
-    user.organizations.push(orgId);
-    user.payment = {
-      isPaid: true,
-      method: 'organization'
+    if (organization.state === 'premium') {
+      const user = await User.findById(userid)
+      user.organizations.push(orgId);
+      user.payment = {
+        isPaid: true,
+        method: 'organization'
+      }
+      await user.save();
     }
-    await user.save();
 
     return res.status(200).json({
       message: `successfully joined ${organization.name} as ${keyType}.`
@@ -339,6 +341,10 @@ router.get('/get-organization/:organizationid', VerifyUser, async (req, res) => 
       .populate({
         path: 'users',
         select: 'name email image',
+        populate: {
+          path: 'analytic',
+          select: 'chapterscores'
+        }
       })
       .populate({
         path: 'moderators createdBy',
@@ -346,14 +352,53 @@ router.get('/get-organization/:organizationid', VerifyUser, async (req, res) => 
       })
       .populate({
         path: 'tests',
-        select: 'testid date',
+        select: 'testid date usersattended name',
       })
       .exec();
+
     if (!organization) {
       return res.status(404).json({ message: 'Organization not found' });
     }
 
+
+    // organization.users.forEach(user => {
+    //   const chapterscores = user.analytic.chapterscores[0]; // Assuming chapterscores is an array
+    //   const result = { score: { t: 0, c: 0 } };
+
+    //   // Loop through each key in chapterscores
+    //   Object.keys(chapterscores).forEach(key => {
+    //     const values = chapterscores[key];
+
+    //     // Calculate the sum of 't' and 'c' for each key
+    //     const sumT = values.reduce((acc, curr) => acc + curr.t, 0);
+    //     const sumC = values.reduce((acc, curr) => acc + curr.c, 0);
+
+    //     // Add the sum to the overall user score
+    //     result.score.t += sumT;
+    //     result.score.c += sumC;
+
+    //     // Store the sum for each key in the result object
+    //     result[key] = {
+    //       sumT,
+    //       sumC
+    //     };
+    //   });
+
+    //   // Calculate the total sum of 't' and 'c' for every key in chapterscores
+    //   const totalSumT = Object.values(chapterscores).reduce((acc, values) => acc + values.reduce((innerAcc, curr) => innerAcc + curr.t, 0), 0);
+    //   const totalSumC = Object.values(chapterscores).reduce((acc, values) => acc + values.reduce((innerAcc, curr) => innerAcc + curr.c, 0), 0);
+
+    //   // Add the total sum to the overall user score
+    //   result.score.t += totalSumT;
+    //   result.score.c += totalSumC;
+
+    //   // Update the fetched user object with the calculated result
+    //   user.analytic.score = { t: totalSumT, c: totalSumC };
+    //   console.log("🚀 ~ router.get ~ user.analytic.score:", user.analytic.score)
+    // });
+
     res.json(organization);
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Internal Server Error' });

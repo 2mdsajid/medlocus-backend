@@ -44,6 +44,11 @@ const organizationSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Customtest",
   }],
+  state: {
+    type: String,
+    enum: ['free', 'premium'],
+    default: 'free'
+  },
   createdAt: {
     type: Date,
     default: Date.now
