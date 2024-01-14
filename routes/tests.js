@@ -7,17 +7,15 @@ const {
   UPDATED_SYLLABUS,
   data_series_subjectwise,
 } = require("../public/syllabus.js");
-const DailyTest = require("../schema/dailytest");
-const SpecialSeries = require("../schema/specialseries");
 const CustomTest = require("../schema/customtests");
 const Question = require("../schema/question");
-const OutQuestion = require("../schema/outquestion");
+const Outquestion = require("../schema/outquestion");
+const PastQuestion = require("../schema/pastquestion");
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 const { limitermiddleware } = require("../middlewares/limiter");
-const { checkCompatibility } = require("./addfile")
 const Organization = require("../schema/organization");
 const Analytic = require("../schema/analytic");
-const { getModelBasedOnSubject } = require('../public/utils.js')
+const { groupQuestionsBySubject } = require('../public/utils.js')
 
 const { sendEmail, LOGO_URL } = require("./gmailroute");
 const createTodayDateId = () => {
@@ -27,18 +25,6 @@ const createTodayDateId = () => {
   const day = String(currentDate.getDate()).padStart(2, "0");
   const dateid = `${year}-${month}-${day}`;
   return dateid;
-};
-
-const groupQuestionsBySubject = async (questions) => {
-  const questionArray = {};
-  for (const question of questions) {
-    const subject = question.subject || 'combined';
-    if (!questionArray[subject]) {
-      questionArray[subject] = [];
-    }
-    questionArray[subject].push(question);
-  }
-  return questionArray;
 };
 
 
@@ -223,12 +209,6 @@ router.get(
             _id: 1,
           },
         },
-        {
-          $set: {
-            uans: "",
-            timetaken: 0,
-          },
-        },
       ]).exec();
       if (questions.length === 0) {
         return res.status(400).json({
@@ -268,35 +248,35 @@ router.get(
         ]).exec();
         questions.push(...selectedquestions);
       }
-      return res.status(200).json({questions});
+      return res.status(200).json({ questions });
     }
 
     // fetch tests by their ids -- incase the above did not work
     else {
+
       if (!testid) {
         return res.status(400).json({
-          message: "undefined testid",
+          message: "Can't find testid",
         });
       }
 
       // for daily tests only -- to get current date from server not from client -- timezones may vary
       const test = await CustomTest.findOne({ testid: testid, type: typeoftest });
-      if (!test) {
-        return res.status(404).json({ message: "Test not found" });
-      }
+      // if (!test) {
+      //   return res.status(404).json({ message: "Test not foundd" });
+      // }
 
-      const userExists = test.usersattended.some((user) => user.userid === userid);
-      if (userExists) {
-        return res.status(400).json({
-          message: "You Have Already Attended This Test",
-        });
-      }
+      // const userExists = test.usersattended.some((user) => user.userid === userid);
+      // if (userExists) {
+      //   return res.status(400).json({
+      //     message: "You Have Already Attended This Test",
+      //   });
+      // }
 
-      test.usersconnected.push(userid);
-      const savedest = await test.save();
+      // test.usersconnected.push(userid);
+      // const savedest = await test.save();
 
       const questionmodel = test.questionmodel;
-      let questions;
 
       const test2 = await CustomTest.findOne({ testid: testid, type: typeoftest })
         .populate({
@@ -305,9 +285,8 @@ router.get(
           select: '_id question options answer explanation subject chapter mergedunit',
         })
         .exec();
-      const ungroupedQuestions = test2.questionsIds
-      questions = await groupQuestionsBySubject(ungroupedQuestions);
-
+      const questions = test2.questionsIds
+      // questions = await groupQuestionsBySubject(ungroupedQuestions);
       return res.status(200).json({ questions });
     }
   }
@@ -402,7 +381,7 @@ router.get("/createdailytest", async (req, res) => {
   }
 });
 
-// fetch questions for custom model tests
+// fetch questions for custom model tests 
 router.get("/get-questions-for-modeltest", VerifyUser, async (req, res) => {
   try {
     const { num } = req.query;
@@ -487,7 +466,7 @@ router.get("/get-questions-for-modeltest", VerifyUser, async (req, res) => {
 });
 
 
-// create custom model tests tests -- 
+// create custom model tests tests -- not  used naywhere ---
 router.post("/create-custom-modeltest", VerifyUser, async (req, res) => {
   try {
     const { name, type, num, username, isOrg } = req.body;
@@ -588,12 +567,20 @@ router.post("/create-custom-modeltest", VerifyUser, async (req, res) => {
   }
 });
 
+// for creating all types of test from the backend
 router.post('/create-test', VerifyUser, async (req, res) => {
   try {
-    const { name, type, questiontype, questions } = req.body;
+    const { name, type, questiontype, isOrg, questions } = req.body;
     const formattedName = name.replace(/\s+/g, '-');
-    // const testid = formattedName + '-' + createTodayDateId();
     const testid = formattedName
+    const userid = req.userId
+    const username = req.user.name
+
+    let organization;
+    if (isOrg && isOrg.state === true) {
+      organization = await Organization.findById(isOrg.by)
+      if (!organization) return res.status(400).json({ message: "Oops organization does not exist." });
+    }
 
     const existingCustomTest = await CustomTest.findOne({ testid, type });
     if (existingCustomTest) {
@@ -616,7 +603,7 @@ router.post('/create-test', VerifyUser, async (req, res) => {
 
       const questionIds = await Promise.all(
         flattenedQuestions.map(async (question) => {
-          const newQuestion = new OutQuestion(question);
+          const newQuestion = new Outquestion(question);
           await newQuestion.save();
           return newQuestion._id;
         })
@@ -627,19 +614,23 @@ router.post('/create-test', VerifyUser, async (req, res) => {
 
     const customTest = new CustomTest({
       type: type,
+      name: name,
       testid: testid,
+      createdBy: userid,
       questionsIds: question_ids,
       questionmodel: questiontype === 'withid' ? 'Question' : 'Outquestion',
-      isSponsored: {
-        by: formattedName,
-      },
+      isOrg: isOrg ? isOrg : { state: false },
     });
     await customTest.save();
 
+    if (isOrg && isOrg.state === true) {
+      organization.tests.push(customTest._id);
+      await organization.save();
+    }
 
     return res.status(200).json({
-      message: 'success',
-      url: process.env.FRONTEND + '/tests?type=prayash&testid=' + testid
+      message: type + " created successfully",
+      url: `${process.env.FRONTEND}/tests/${type}/${testid}?by=${username.toLowerCase().replace(/\s+/g, '-')}`,
     });
   } catch (error) {
     console.error(error);
@@ -681,22 +672,18 @@ router.get("/invalidatedailytest", async (req, res) => {
   }
 });
 
-router.get("/getdailytests",VerifyUser, async (req, res) => {
+router.get("/get-custom-tests", VerifyUser, async (req, res) => {
   try {
-    const customTestsWithAttendees = await CustomTest.find({
-      archive: true,
+    const tests = await CustomTest.find({
       usersattended: { $exists: true, $not: { $size: 0 } },
     }).select("_id testid date type");
-    
-    if (!customTestsWithAttendees || customTestsWithAttendees.length === 0) {
+
+    if (!tests || tests.length === 0) {
       return res.status(200).json({
         message: "No tests found with attendees",
       });
     }
-    return res.status(200).json({
-      message: "Tests fetched",
-      tests: customTestsWithAttendees,
-    });
+    return res.status(200).json(tests)
 
   } catch (error) {
     return res.status(400).json({
@@ -705,38 +692,78 @@ router.get("/getdailytests",VerifyUser, async (req, res) => {
   }
 });
 
-router.get("/getdailytests/:typeoftest",VerifyUser, async (req, res) => {
+router.get("/get-custom-tests/:type", async (req, res) => {
   try {
-    const { typeoftest } = req.params;
-    let testid = req.query.testid;
-    // if (typeoftest === 'dailytest') {
-    //   testid = createTodayDateId();
-    // }
-
-    if (!testid) {
+    const { type } = req.params;
+    if (!type) {
       return res.status(400).json({
-        message: "Undefined testid",
+        message: "Undefined type",
       });
     }
 
     // Retrieve the test
-    let testQuery = { testid: testid, type: typeoftest };
-    let test = await CustomTest.findOne(testQuery);
-    if (!test) {
-      return res.status(404).json({ message: "Test not found" });
+    let tests = await CustomTest.find({ type: type })
+      .populate({
+        path: "createdBy",
+        select: "name email"
+      })
+      .select('image name createdBy usersattended date testid')
+      .exec()
+    if (!tests || tests.length == 0) {
+      return res.status(404).json({ message: "tests not found" });
     }
-    let testQuestions = test.questions
 
-    const typeofquestions = test.questiontype;
-    if (typeofquestions === 'withid') {
-      test = await CustomTest.findOne(testQuery)
-        .populate({
-          path: 'questionsIds',
-          select: '_id question options answer explanation subject chapter mergedunit',
-        })
-        .sort({ date: -1 })
-        .limit(4)
-        .exec();
+    return res.status(200).json(tests);
+
+  } catch (error) {
+    console.error("Error in getdailytests route:", error);
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+});
+
+// fetch custom tests -- based on type and test id---
+// to retrive tests for tests as well as preview before test
+router.get('/get-custom-tests/:type/:testid', async (req, res) => {
+  try {
+    const { type, testid } = req.params
+    const customTest = await CustomTest.findOne({ type, testid })
+      .populate({
+        path: "createdBy",
+        select: "name email image"
+      })
+      .populate({
+        path: "isOrg.by",
+        select: "name"
+      })
+      .select('image name type createdBy testid questionsIds isLocked archive')
+      .exec();
+
+    if (!customTest) {
+      return res.status(300).json({ message: 'No test available' })
+    }
+
+    const modifiedCustomTests = {
+      name: customTest.name,
+      testid: customTest.testid,
+      image: customTest.image,
+      createdBy: {
+        email: customTest.createdBy.email,
+        name: customTest.createdBy.name,
+      },
+      numberOfQuestions: customTest.questionsIds.length,
+      type: customTest.type,
+      isLocked: customTest.isLocked
+    }
+
+    return res.status(200).json(modifiedCustomTests)
+
+  } catch (error) {
+    console.error('Error retrieving chapters:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
 
 // to retrive tests for tests as well as preview before test
 // for results
@@ -774,13 +801,65 @@ router.get('/get-customtest/:id', async (req, res) => {
     return res.status(200).json({ questions: customTest.questionsIds, users })
 
   } catch (error) {
-    console.error("Error in getdailytests route:", error);
-    return res.status(500).json({
-      message: "Internal server error",
-    });
+    console.error('Error retrieving chapters:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
   }
 });
 
+// fetch chapters for chapterwise tests
+router.get('/get-chapters', async (req, res) => {
+  try {
+    const { sub } = req.query;
+    if (!sub) {
+      return res.status(400).json({ error: 'Subject not provided' });
+    }
+    const chapterCounts = await Question.aggregate([
+      { $match: { subject: sub } },
+      { $group: { _id: '$chapter', count: { $sum: 1 } } },
+      { $project: { _id: 0, name: '$_id', count: 1 } }
+    ]);
+    return res.json(chapterCounts);
+  } catch (error) {
+    console.error('Error retrieving chapters:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+
+// get chapters and it number of questions
+router.get('/get-subjects', async (req, res) => {
+  try {
+    const subjectsWithCount = await Question.aggregate([
+      { $group: { _id: '$subject', count: { $sum: 1 } } },
+      { $project: { _id: 0, name: '$_id', count: 1 } }
+    ]);
+    return res.json(subjectsWithCount);
+  } catch (error) {
+    console.error('Error retrieving subjects with count:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Fetch merged units for merged unitwise tests using aggregation pipeline
+router.get('/get-mergedunits', async (req, res) => {
+  try {
+    const { sub } = req.query;
+    if (!sub) {
+      return res.status(400).json({ error: 'Subject not provided' });
+    }
+    const mergedUnitCounts = await Question.aggregate([
+      { $match: { subject: sub } },
+      { $group: { _id: '$mergedunit', count: { $sum: 1 } } },
+      { $project: { _id: 0, name: '$_id', count: 1 } }
+    ]);
+    return res.json(mergedUnitCounts);
+  } catch (error) {
+    console.error('Error retrieving merged units:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// 
 
 router.post("/addusertotest", async (req, res) => {
   const { typeoftest } = req.query;
@@ -859,99 +938,6 @@ router.post("/addusertotest", async (req, res) => {
   });
 });
 
-// fetch custom tests
-router.get('/get-custom-tests/:typeoftest', async (req, res) => {
-  try {
-    const { typeoftest } = req.params
-
-    const customTests = await CustomTest.find({ type: typeoftest })
-      .populate({
-        path: "creator.by",
-        model: "User",
-        select: "name email"
-      })
-      .select('name testid creator.by questionsIds type date')
-      .exec();
-
-    if (customTests.length == 0) {
-      return res.status(300).json({ message: 'No test available' })
-    }
-
-    const modifiedCustomTests = customTests.map(test => ({
-      name: test.name,
-      testid: test.testid,
-      creator: {
-        _id: test.creator._id,
-        name: test.creator.by.name,
-      },
-      numberOfQuestions: test.questionsIds.length,
-      type: test.type,
-      date: test.date,
-    }));
-
-    return res.status(200).json(modifiedCustomTests)
-
-  } catch (error) {
-    console.error('Error retrieving chapters:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-// fetch chapters for chapterwise tests
-router.get('/get-chapters', async (req, res) => {
-  try {
-    const { sub } = req.query;
-    if (!sub) {
-      return res.status(400).json({ error: 'Subject not provided' });
-    }
-    const chapterCounts = await Question.aggregate([
-      { $match: { subject: sub } },
-      { $group: { _id: '$chapter', count: { $sum: 1 } } },
-      { $project: { _id: 0, name: '$_id', count: 1 } }
-    ]);
-    return res.json(chapterCounts);
-  } catch (error) {
-    console.error('Error retrieving chapters:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-
-// get chapters and it number of questions
-router.get('/get-subjects', async (req, res) => {
-  try {
-    const subjectsWithCount = await Question.aggregate([
-      { $group: { _id: '$subject', count: { $sum: 1 } } },
-      { $project: { _id: 0, name: '$_id', count: 1 } }
-    ]);
-    return res.json(subjectsWithCount);
-  } catch (error) {
-    console.error('Error retrieving subjects with count:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-// Fetch merged units for merged unitwise tests using aggregation pipeline
-router.get('/get-mergedunits', async (req, res) => {
-  try {
-    const { sub } = req.query;
-    if (!sub) {
-      return res.status(400).json({ error: 'Subject not provided' });
-    }
-    const mergedUnitCounts = await Question.aggregate([
-      { $match: { subject: sub } },
-      { $group: { _id: '$mergedunit', count: { $sum: 1 } } },
-      { $project: { _id: 0, name: '$_id', count: 1 } }
-    ]);
-    return res.json(mergedUnitCounts);
-  } catch (error) {
-    console.error('Error retrieving merged units:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-// 
-
 
 
 // fetch sets for pastpapers
@@ -1007,11 +993,134 @@ router.get('/get-pastpapers-count', async (req, res) => {
   }
 });
 
+
+
+
+/* EXPERIMENTAL STUFFS */
+router.post('/create-test/:organizationid', async (req, res) => {
+  try {
+    const { name, questiontype, questions } = req.body;
+    const { createdby, organizationid } = req.params;
+
+    const organization = await Organization.findById(organizationid);
+    if (!organization) return res.status(404).json({ message: 'Organization not found.' });
+    const organizationsParams = {
+      type: organization.uniqueId,
+      isSponsored: {
+        state: true,
+        by: organization.name,
+        image: organization.image
+      },
+    }
+    const formattedName = name.replace(/\s+/g, '-');
+    const testid = formattedName + '-' + createTodayDateId();
+
+    const existingCustomTest = await CustomTest.findOne({
+      testid,
+      type: organization.uniqueId
+    })
+    if (existingCustomTest) {
+      return res.status(400).json({ message: "Test Series with the same name already exists." });
+    }
+
+    let test_id
+    if (questiontype === 'withoutid') {
+      const customTest = new CustomTest({
+        testid: testid,
+        questions: questions,
+        questiontype: questiontype,
+        ...organizationsParams
+      });
+      await customTest.save();
+      test_id = customTest._id
+    }
+
+    if (questiontype === 'withid') {
+      const customTest = new CustomTest({
+        testid: testid,
+        questionsIds: questions,
+        questiontype: questiontype,
+        ...organizationsParams
+      });
+      await customTest.save();
+      test_id = customTest._id
+    }
+
+    organization.tests.push(test_id)
+    organization.save()
+
+    return res.status(200).json({
+      message: 'success',
+      url: process.env.FRONTEND + '/tests?type=prayash&testid=' + testid
+    });
   } catch (error) {
-    console.error('Error retrieving chapters:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
+    console.error(error);
+    return res.status(500).json({
+      message: 'Internal Server Error',
+    });
   }
-});
+})
+
+router.post('/add-anal', async (req, res) => {
+  try {
+    const { test_id, userid, score, timetaken } = req.body
+    let anal = await Analytic.findOne({ userid })
+    if (!anal) {
+      anal = new Analytic({
+        userid,
+        tests: [
+          {
+            test: test_id,
+            score,
+            timetaken,
+          }]
+      })
+      await anal.save()
+      return res.status(200).json({ anal })
+    }
+
+    anal.tests.push({
+      test: test_id,
+      score,
+      timetaken,
+    })
+    await anal.save()
+    return res.status(200).json({ anal })
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: 'Internal Server Error',
+    });
+  }
+})
+
+router.post('/add-nonanal', async (req, res) => {
+  try {
+    const { userid, score, type, name } = req.body
+    if (!['subjectwise', 'chapterwise', 'unitwise'].includes(type)) {
+      return res.status(300).json({ message: 'invalid request' })
+    }
+
+    let anal = await Analytic.findOne({ userid })
+    if (!anal) {
+      anal = new Analytic({ userid })
+      await anal.save()
+    }
+
+    // save by checking the type in their respective array
+    anal.nontests.push({ n: name, s: score, t: type })
+
+    await anal.save()
+    return res.status(200).json({ anal })
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: 'Internal Server Error',
+    });
+  }
+})
 
 module.createTodayDateId = createTodayDateId;
 module.exports = router;

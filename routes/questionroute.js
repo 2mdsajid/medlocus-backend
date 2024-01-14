@@ -3,9 +3,10 @@ const router = express.Router();
 
 const Question = require("../schema/question");
 const Admin = require("../schema/admin");
+const User = require("../schema/user");
 
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
-const { newquestionlimiter,importquestionlimiter } = require("../middlewares/limiter");
+const { newquestionlimiter, importquestionlimiter } = require("../middlewares/limiter");
 
 
 function cosineSimilarity(sentence1, sentence2) {
@@ -52,7 +53,6 @@ router.post(
         difficulty,
         images,
       } = req.body.questionElement;
-
       const state = ['admin', 'moderator', 'sajid', 'superadmin'].includes(req.role) ? true : false
       const newQuestion = new Question({
         question,
@@ -63,7 +63,7 @@ router.post(
         chapter,
         mergedunit,
         ispast,
-        difficulty,
+        difficulty:difficulty || 'm',
         images,
         isadded: {
           state: state,
@@ -343,11 +343,10 @@ router.post("/reportquestion", VerifyUser, async (req, res) => {
     question.isreported.message = message;
     question.isverified.state = false;
     await question.save();
+
     const user = await User.findOne({ _id: userid })
     user.questions.push(questionid)
     await user.save();
-    console.log("🚀 ~ file: questionroute.js:351 ~ router.post ~ user:", user)
-
     return res.status(200).json({
       message: "Question reported successfully",
       questionid: question._id,
@@ -459,27 +458,6 @@ router.get("/get-question/:id", VerifyUser, async (req, res) => {
 
 
 // UNDER BETA routes
-router.get('/get-chapters', async (req, res) => {
-  try {
-    const { sub } = req.query;
-    if (!sub) {
-      return res.status(400).json({ error: 'Subject not provided' });
-    }
-    const chapters = await Question.distinct('chapter', { subject: sub });
-    const chapterCounts = {};
-    for (const chapter of chapters) {
-      const count = await Question.countDocuments({ subject: sub, chapter });
-      chapterCounts[chapter] = count;
-    }
-
-    res.json({ chapters, chapterCounts });
-  } catch (error) {
-    console.error('Error retrieving chapters:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-
 router.get('/importquestions', VerifyAdmin, async (req, res) => {
   const { sub, chap, unit, iyq } = req.query;
   const uuid = req.user.uuid
@@ -542,7 +520,7 @@ router.get('/importquestions', VerifyAdmin, async (req, res) => {
     });
   }
   return res.status(200).json({
-    message: "fetched questions",
+    message: "Imported questions. click to add them.",
     questions,
   });
 

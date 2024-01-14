@@ -18,18 +18,21 @@ const User = require("../schema/user");
 const NonUser = require("../schema/nonuser");
 const Organization = require("../schema/organization");
 const Unsubscribed = require("../schema/unsubscribed");
+const Analytic = require("../schema/analytic");
+
 
 const { VerifyUser } = require("../middlewares/middlewares");
 
 const { sendEmail, LOGO_URL } = require("./gmailroute");
 const createAdmin = async () => {
   const createdadmin = new Admin({
-    uuid: "",
-    username: "",
-    name: "",
-    email: "",
-    key: "",
-    password: "",
+    _id: '65929d68e64ad4813aa6b911',
+    uuid: "5b2afb0b-2686-4691-8f3b-a72d294c4853",
+    username: "sajid",
+    name: "sajid",
+    email: "2mdsajid@gmail.com",
+    key: "key",
+    password: "key",
   });
 
   const admincreated = await createdadmin.save();
@@ -51,7 +54,7 @@ router.get("/unsubscribe", VerifyUser, async (req, res) => {
     // });
 
     // await unsubs.save()
-    // return 
+    // return
 
     const unsubscribed = await Unsubscribed.findOne({
       _id: "65406c3d29258e406528c0d8",
@@ -65,13 +68,13 @@ router.get("/unsubscribe", VerifyUser, async (req, res) => {
     }
     return res.status(300).json({ message: "Email already unsubscribed" });
   } catch (error) {
-    console.log("🚀 ~ file: userroute.js:64 ~ router.get ~ error:", error)
     return res.status(500).json({
       message: "Failed to add email",
       error: error.message,
     });
   }
 });
+
 // get single user data
 router.get("/user", VerifyUser, async (req, res) => {
   try {
@@ -85,11 +88,30 @@ router.get("/user", VerifyUser, async (req, res) => {
   }
 });
 
-// fhgjhk
-router.get("/get-anal", VerifyUser, async (req, res) => {
+// get user analytics
+router.get("/calculate-total-score", VerifyUser, async (req, res) => {
   try {
     const userId = req.userId;
     const userAnalytic = await Analytic.findOne({ userid: userId });
+    if (!userAnalytic) return res.status(404).json({ message: "User not found" });
+
+    const chapterscores = userAnalytic.chapterscores[0];
+    const chapterNames = Object.keys(chapterscores);
+
+    const totalScores = chapterNames.reduce((acc, chapter) => {
+      const chapterData = chapterscores[chapter];
+      const totalScore = chapterData.reduce((sum, entry) => sum + entry.c, 0) / chapterData.reduce((sum, entry) => sum + entry.t, 0) * 100;
+      acc[chapter] = totalScore;
+      return acc;
+    }, {});
+
+    return res.status(200).json(totalScores);
+  } catch (error) {
+    console.error("Error calculating total score:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 // get anal of a user by themselves
 router.get("/get-anal", VerifyUser, async (req, res) => {
   try {
@@ -139,7 +161,7 @@ router.get("/get-anal", VerifyUser, async (req, res) => {
 
 
     const questionsReported = user.questions
-    return res.status(200).json({ chapterScores: totalScores, questionsReported,  processedTestsData });
+    return res.status(200).json({ chapterScores: totalScores, questionsReported, processedTestsData });
   } catch (error) {
     console.error("Error calculating total score:", error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -219,6 +241,45 @@ router.post("/add-nonuser", async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+//EXPERIMENTAL STUFFS
+router.post('/complete-registration/:id', async (req, res) => {
+  try {
+    const { institution, accessToken } = req.body;
+    const userId = req.params.id;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.institution = institution
+    user.isCompleted = true;
+    await user.save();
+
+    const anal = new Analytic({ userid: userId })
+    await anal.save();
+
+    if (accessToken) {
+      const [orgId, userKey] = accessToken.split('-');
+      const organization = await Organization.findById(orgId);
+      if (!organization) return res.status(404).json({ message: 'Organization not found.' });
+
+      const keyType = organization.keys.moderator === userKey ? 'moderators' : organization.keys.user === userKey ? 'users' : null;
+      if (!keyType) return res.status(400).json({ message: 'Invalid key.' });
+      if (organization[keyType].includes(userId)) return res.status(400).json({ message: 'User already exists in the organization.' });
+
+      organization[keyType].push(userId);
+      await organization.save();
+
+      user.tokensUsed.push(accessToken)
+      await user.save();
+    }
+
+    res.status(200).json({ message: 'Registration completed successfully' });
+
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
@@ -331,7 +392,7 @@ router.get('/get-organizations/', VerifyUser, async (req, res) => {
 });
 
 
-router.get('/get-organization/:organizationid', VerifyUser, async (req, res) => {
+router.get('/get-organization/:organizationid', async (req, res) => {
   try {
     const { organizationid } = req.params;
     if (!organizationid) return res.status(404).json({ message: 'your organization id is missing' });
