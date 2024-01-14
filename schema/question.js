@@ -13,7 +13,7 @@ const questionSchema = new mongoose.Schema({
       d: String,
     },
     required: true,
-  }, 
+  },
   answer: {
     type: String,
     required: true,
@@ -52,7 +52,7 @@ const questionSchema = new mongoose.Schema({
   },
   difficulty: {
     type: String,
-    default:'m',
+    default: 'm',
   },
   isadded: {
     state: {

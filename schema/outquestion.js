@@ -44,6 +44,6 @@ const outQuestionSchema = new mongoose.Schema({
     },
 });
 
-const OutQuestion = mongoose.model("Outquestion", outQuestionSchema);
+const Outquestion = mongoose.model("Outquestion", outQuestionSchema);
 
-module.exports = OutQuestion;
+module.exports = Outquestion;
