@@ -4,9 +4,11 @@ const router = express();
 const multer = require("multer");
 const upload = multer({ dest: "uploads/" }); // Destination folder for uploaded files
 const fs = require("fs");
-const Question = require("../schema/question"); // Import the Question model
+const Question = require("../schema/question");
+const PastQuestion = require("../schema/pastquestion");
 const Admin = require("../schema/admin");
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
+const CustomTest = require("../schema/customtests");
 
 const stopWords = [
   "a",
@@ -118,19 +120,18 @@ function cosineSimilarity(sentence1, sentence2) {
 }
 
 const findSimilarQuestionsFromArray = (inputData, matchingQuestions) => {
-  const inputQuestions = inputData.map((question) => question.qn);
+  const inputQuestions = inputData.map((question) => question.question);
   const questionValues = matchingQuestions.map((question) => question.question);
-
   const similarityResults = [];
-  for (const inputQuestion of inputQuestions) {
-    for (const questionValue of questionValues) {
-      const similarity = cosineSimilarity(inputQuestion, questionValue);
+  for (const inputQuestion of inputData) {
+    for (const questionValue of matchingQuestions) {
+      const similarity = cosineSimilarity(inputQuestion.question, questionValue.question);
 
       // Include only pairs with similarity greater than 40%
       if (similarity > 0.4) {
         similarityResults.push({
-          yourQuestion: inputQuestion,
-          databaseQuestion: questionValue,
+          yourQuestion: JSON.stringify(inputQuestion),
+          databaseQuestion: JSON.stringify(questionValue),
           similarity: Math.round(similarity * 100) + "%",
         });
       }
@@ -142,31 +143,6 @@ const findSimilarQuestionsFromArray = (inputData, matchingQuestions) => {
   return similarityResults;
 };
 
-const getModelBasedOnSubject = (subject) => {
-  let SubjectModel;
-  switch (subject) {
-    case "botany":
-      SubjectModel = Botany;
-      break;
-    case "zoology":
-      SubjectModel = Zoology;
-      break;
-    case "physics":
-      SubjectModel = Physics;
-      break;
-    case "chemistry":
-      SubjectModel = Chemistry;
-      break;
-    case "mat":
-      SubjectModel = Mat;
-      break;
-    default:
-      // Handle invalid subject
-      return "zoology";
-  }
-
-  return SubjectModel;
-};
 
 const answersValues = ["a", "b", "c", "d"];
 const yearPattern = /\s*\[\d{4}\]/g;
@@ -183,6 +159,36 @@ const assignTopic = async (questions, topic, subject) => {
     return questions;
   } catch (jsonParseError) {
     console.error("Error assigning unit:", jsonParseError);
+  }
+};
+const assignYearAndAffiliation = async (questions, year, affiliation, addedby) => {
+  try {
+    const assignedUnits = [];
+    for (const question of questions) {
+      assignedUnits.push({
+        question: removeYearPattern(question.qn),
+        options: question.options,
+        answer: question.ans,
+        explanation: question.explanation,
+        images: question.images || {
+          qn: "",
+          a: "",
+          b: "",
+          c: "",
+          d: "",
+          exp: "",
+        },
+        yr: year,
+        af: affiliation,
+        isadded: {
+          state: true,
+          by: addedby,
+        },
+      });
+    }
+    return assignedUnits;
+  } catch (error) {
+    console.error("Error assigning unit:", error);
   }
 };
 
@@ -210,7 +216,7 @@ const assignUnit = async (questions, addedby, mergedunit, sub) => {
             exp: "",
           },
           difficulty: question.difficulty
-            ? question.difficulty[0].toLowercase()
+            ? question.difficulty[0].toLowerCase()
             : "m",
           isadded: {
             state: true,
@@ -268,7 +274,6 @@ const checkCompatibility = (question) => {
 
 router.post(
   "/uploadjsondata",
-  upload.single("jsonFile"),
   VerifyAdmin,
   async (req, res) => {
     const jsonData = JSON.parse(req.body.jsondata);
@@ -276,6 +281,10 @@ router.post(
     const mergedunit = req.body.unit;
     const topic = req.body.chapter;
     const addedby = req.user.uuid;
+
+    if (!subject || !mergedunit || !topic) {
+      return res.status(300).json({ message: 'you are missing to provide subject or chapter or unit' });
+    }
 
     const incompatibleQuestions = await jsonData.filter(
       (question) => !checkCompatibility(question)
@@ -286,22 +295,22 @@ router.post(
       });
     }
 
-    const matchingQuestions = await Question.find({
-      subject: subject,
-      mergedunit: mergedunit,
-      chapter: topic,
-    });
+    // const matchingQuestions = await Question.find({
+    //   subject: subject,
+    //   mergedunit: mergedunit,
+    //   chapter: topic,
+    // });
 
-    const similarityResults = findSimilarQuestionsFromArray(
-      jsonData,
-      matchingQuestions
-    );
+    // const similarityResults = findSimilarQuestionsFromArray(
+    //   jsonData,
+    //   matchingQuestions
+    // );
 
-    if (similarityResults.length > 0) {
-      return res.status(200).json({
-        message: `${similarityResults.length} Similar questions found`,
-      });
-    }
+    // if (similarityResults.length > 0) {
+    //   return res.status(200).json({
+    //     message: `${similarityResults.length} Similar questions found`,
+    //   });
+    // }
     const assignedTopics = await assignTopic(jsonData, topic, subject);
     const assignedUnits = await assignUnit(
       assignedTopics,
@@ -323,19 +332,6 @@ router.post(
       });
     });
 
-    // Iterate through the subject models and insert the grouped questions
-    const SubjectModels = [...new Set(newQuestions.map((q) => q.subject))];
-    for (const model of SubjectModels) {
-      const SubjectModel = getModelBasedOnSubject(model);
-      const subjectQuestions = questionsBySubject[model];
-      if (subjectQuestions && subjectQuestions.length > 0) {
-        await SubjectModel.insertMany(subjectQuestions);
-        console.log(
-          ` ${model} - ${assignedUnits.length} questions inserted successfully.`
-        );
-      }
-    }
-
     const admin = await Admin.findOne({ uuid: newQuestions[0].isadded.by });
     admin.questions = admin.questions + assignedUnits.length;
     await admin.save();
@@ -346,115 +342,68 @@ router.post(
   }
 );
 
-router.post(
-  "/uploadjson",
-  upload.single("jsonFile"),
-  VerifyAdmin,
-  async (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ mesage: "No file uploaded." });
+// add past questions
+router.post("/add-past-questions", VerifyAdmin, async (req, res) => {
+  try {
+    const jsonData = JSON.parse(req.body.jsondata);
+    const yr = req.body.year;
+    const af = req.body.affiliation;
+    const addedby = req.userId;
+
+    if (!yr || !af) {
+      return res.status(300).json({ message: 'you are missing to provide year or affiliation' });
     }
 
-    const subject = req.body.subject;
-    const mergedunit = req.body.unit;
-    const topic = req.body.chapter;
-    const addedby = req.user.uuid;
+    const incompatibleQuestions = await jsonData.filter(
+      (question) => !checkCompatibility(question)
+    );
+    if (incompatibleQuestions.length > 0) {
+      return res.status(400).json({
+        message: `${incompatibleQuestions.length} Incompatible questions found. Please refer the docs fro compatibility`,
+      });
+    }
 
-    fs.readFile(req.file.path, "utf8", async (err, data) => {
-      if (err) {
-        return res.status(500).send("Error reading the uploaded file.");
-      }
-      try {
-        const jsonData = JSON.parse(data);
-        const incompatibleQuestions = jsonData.filter(
-          (question) => !checkCompatibility(question)
-        );
+    const existingTest = await CustomTest.findOne({ type: "pastpaper", testid: `${af}-${yr}` });
+    if (existingTest) {
+      return res.status(400).json({
+        message: `This set '${af}-${yr}' already exists in past year sets.`,
+      });
+    }
+    
+    const assignedYearAffiliationQuestions = await assignYearAndAffiliation(jsonData, yr, af, addedby);
+    const newQuestions = await PastQuestion.insertMany(assignedYearAffiliationQuestions);
 
-        if (incompatibleQuestions.length > 0) {
-          return res.status(400).json({
-            message: `${incompatibleQuestions.length} Incompatible questions found. Please refer the docs fro compatibility`,
-          });
-        }
-
-        const matchingQuestions = await Question.find({
-          subject: subject,
-          mergedunit: mergedunit,
-          chapter: topic,
-        });
-
-        const similarityResults = findSimilarQuestionsFromArray(
-          jsonData,
-          matchingQuestions
-        );
-
-        if (similarityResults.length > 0) {
-          return res.status(400).json({
-            message: `${similarityResults.length} Similar questions found. Please check in 'check similar' section and remove them!`,
-          });
-        }
-        const assignedTopics = await assignTopic(jsonData, topic, subject);
-        const assignedUnits = await assignUnit(
-          assignedTopics,
-          addedby,
-          mergedunit,
-          subject
-        );
-        const newQuestions = await Question.insertMany(assignedUnits);
-
-        const admin = await Admin.findOne({ uuid: newQuestions[0].isadded.by });
-        admin.questions = admin.questions + assignedUnits.length;
-        await admin.save();
-        fs.unlink(req.file.path, (error) => {
-          if (error) return console.log("unlinked the file error");
-        });
-        res.status(200).json({
-          message: ` ${subject} - ${topic} - ${mergedunit} - ${assignedUnits.length} questions - By ${req.user.name} --  added.`,
-        });
-      } catch (error) {
-        res.status(400).json({
-          message: error.message,
-        });
-      }
+    // creating the test for past questions
+    const questionIds = newQuestions.map(question => question._id);
+    const newCustomTest = new CustomTest({
+      type: "pastpapers",
+      name : `${af}-${yr}`,
+      testid: `${af}-${yr}`,
+      creator: {
+        model: 'User',
+        by: addedby,
+      },
+      questionmodel: "Pastquestion",
+      questionsIds: questionIds,
     });
-  }
-);
 
-router.post(
-  "/checkcompatibility",
-  upload.single("jsoncheck"),
-  VerifyAdmin,
-  (req, res) => {
-    fs.readFile(req.file.path, "utf8", (err, data) => {
-      if (err) {
-        return res.status(500).send("Error reading the uploaded file.");
-      }
-      try {
-        const jsonData = JSON.parse(data);
-        const incompatibleQuestions = jsonData.filter(
-          (question) => !checkCompatibility(question)
-        );
-        if (incompatibleQuestions.length > 0) {
-          res.status(400).json({
-            message: `${incompatibleQuestions.length} Incompatible questions found`,
-            incompatibleQuestions,
-          });
-        } else {
-          res.status(200).json({
-            message: "All questions are compatible.",
-            numberofquestions: jsonData.length,
-          });
-        }
-        return fs.unlink(req.file.path, (error) => {
-          if (error) return console.log("unlinked the file");
-        });
-      } catch (error) {
-        res.status(400).json({
-          message: error.message,
-        });
-      }
+    await newCustomTest.save();
+
+    // update admin for adding questions
+    const admin = await Admin.findOne({ _id: addedby });
+    admin.questions = admin.questions + assignedYearAffiliationQuestions.length;
+    await admin.save();
+
+    return res.status(200).json({
+      message: ` ${yr} - ${af} - ${assignedYearAffiliationQuestions.length} questions - By ${req.user.name} --  added.`,
     });
+
+  } catch (error) {
+    console.error("Error ", error);
+    return res.status(500).json({ message: error.message });
+
   }
-);
+});
 
 router.post(
   "/find-similar-questions",
@@ -475,20 +424,18 @@ router.post(
           subject: subject,
           mergedunit: mergedunit,
           chapter: chapter,
-        });
-
+        }).select('_id question options answer')
         const similarityResults = findSimilarQuestionsFromArray(
           inputData,
           matchingQuestions
         );
-
         if (similarityResults.length > 0) {
           return res.status(400).json({
             message: `${similarityResults.length} similar questions found`,
             questions: similarityResults,
           });
         }
-        return fs.unlink(req.file.path, (error) => {
+        fs.unlink(req.file.path, (error) => {
           if (error) return console.log("unlinked the file");
         });
         return res.status(200).json({ message: "No similar questions found" });
@@ -500,4 +447,5 @@ router.post(
   }
 );
 
+module.checkCompatibility = checkCompatibility
 module.exports = router;
