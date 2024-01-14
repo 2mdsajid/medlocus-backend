@@ -18,6 +18,7 @@ const User = require("../schema/user");
 const NonUser = require("../schema/nonuser");
 const Organization = require("../schema/organization");
 const Unsubscribed = require("../schema/unsubscribed");
+const Feedback = require("../schema/feedback");
 const Analytic = require("../schema/analytic");
 
 
@@ -466,4 +467,27 @@ router.get('/get-organization/:organizationid', async (req, res) => {
   }
 });
 
+
+// for feedback and contsct
+router.post('/feedback', async (req, res) => {
+  try {
+      const { name, email, message, image } = req.body;
+
+      // Create a new feedback instance using the Feedback model
+      const feedback = new Feedback({
+          name,
+          email,
+          message,
+          image
+      });
+
+      // Save the feedback to the MongoDB database
+      await feedback.save();
+
+      res.status(201).json({ success: true, message: 'Feedback saved successfully' });
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+});
 module.exports = router;
