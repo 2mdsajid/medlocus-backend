@@ -74,7 +74,7 @@ const VerifyUser = async (req, res, next) => {
     const secretkey = process.env.JWT_SECRET_KEY;
     const userFromAuth = jwt.verify(token, secretkey);
 
-    const user = await User.findById(userFromAuth._id).select('_id name email image role key questions discussions')
+    const user = await User.findById(userFromAuth._id).select('_id name email image role key questions discussions payment')
     if (!user) return res.status(403).json({ message: "Invalid Authentication" });
 
     req.userId = user._id;
