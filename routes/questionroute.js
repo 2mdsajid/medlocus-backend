@@ -6,7 +6,7 @@ const Admin = require("../schema/admin");
 const User = require("../schema/user");
 
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
-const { newquestionlimiter, importquestionlimiter } = require("../middlewares/limiter");
+const { newquestionlimiter, importquestionlimiter, limitermiddleware } = require("../middlewares/limiter");
 
 
 function cosineSimilarity(sentence1, sentence2) {
@@ -63,7 +63,7 @@ router.post(
         chapter,
         mergedunit,
         ispast,
-        difficulty:difficulty || 'm',
+        difficulty: difficulty || 'm',
         images,
         isadded: {
           state: state,
@@ -458,7 +458,7 @@ router.get("/get-question/:id", VerifyUser, async (req, res) => {
 
 
 // UNDER BETA routes
-router.get('/importquestions', VerifyAdmin, async (req, res) => {
+router.get('/importquestions', VerifyAdmin, importquestionlimiter, async (req, res) => {
   const { sub, chap, unit, iyq } = req.query;
   const uuid = req.user.uuid
   let questions
