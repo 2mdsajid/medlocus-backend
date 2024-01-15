@@ -21,7 +21,7 @@ const newquestionlimiter = rateLimit({
 
 const importquestionlimiter = rateLimit({
   windowMs: 24 * 60 * 60 * 1000,
-  max: 8,
+  max: 6,
   message: {
     message: "Looks like you have exceeded your limits to import questions. Contact me if you are Ashik jha !",
     status: 429,
