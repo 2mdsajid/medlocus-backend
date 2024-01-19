@@ -262,19 +262,19 @@ router.get(
 
       // for daily tests only -- to get current date from server not from client -- timezones may vary
       const test = await CustomTest.findOne({ testid: testid, type: typeoftest });
-      // if (!test) {
-      //   return res.status(404).json({ message: "Test not foundd" });
-      // }
+      if (!test) {
+        return res.status(404).json({ message: "Test not foundd" });
+      }
 
-      // const userExists = test.usersattended.some((user) => user.userid === userid);
-      // if (userExists) {
-      //   return res.status(400).json({
-      //     message: "You Have Already Attended This Test",
-      //   });
-      // }
+      const userExists = test.usersattended.some((user) => user.userid === userid);
+      if (userExists) {
+        return res.status(400).json({
+          message: "You Have Already Attended This Test",
+        });
+      }
 
-      // test.usersconnected.push(userid);
-      // const savedest = await test.save();
+      test.usersconnected.push(userid);
+      const savedest = await test.save();
 
       const questionmodel = test.questionmodel;
 
