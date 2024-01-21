@@ -348,8 +348,7 @@ router.post("/add-past-questions", VerifyAdmin, async (req, res) => {
     const jsonData = JSON.parse(req.body.jsondata);
     const yr = req.body.year;
     const af = req.body.affiliation;
-    const addedby = req.userId;
-
+    const addedby = req.user._id;
     if (!yr || !af) {
       return res.status(300).json({ message: 'you are missing to provide year or affiliation' });
     }
@@ -357,6 +356,7 @@ router.post("/add-past-questions", VerifyAdmin, async (req, res) => {
     const incompatibleQuestions = await jsonData.filter(
       (question) => !checkCompatibility(question)
     );
+    
     if (incompatibleQuestions.length > 0) {
       return res.status(400).json({
         message: `${incompatibleQuestions.length} Incompatible questions found. Please refer the docs fro compatibility`,
@@ -379,16 +379,12 @@ router.post("/add-past-questions", VerifyAdmin, async (req, res) => {
       type: "pastpapers",
       name : `${af}-${yr}`,
       testid: `${af}-${yr}`,
-      creator: {
-        model: 'User',
-        by: addedby,
-      },
+      createdBy: addedby,
       questionmodel: "Pastquestion",
       questionsIds: questionIds,
     });
 
     await newCustomTest.save();
-
     // update admin for adding questions
     const admin = await Admin.findOne({ _id: addedby });
     admin.questions = admin.questions + assignedYearAffiliationQuestions.length;
