@@ -19,6 +19,7 @@ const NonUser = require("../schema/nonuser");
 const Organization = require("../schema/organization");
 const Unsubscribed = require("../schema/unsubscribed");
 const Feedback = require("../schema/feedback");
+const Request = require("../schema/request");
 const Analytic = require("../schema/analytic");
 
 
@@ -471,23 +472,48 @@ router.get('/get-organization/:organizationid', async (req, res) => {
 // for feedback and contsct
 router.post('/feedback', async (req, res) => {
   try {
-      const { name, email, message, image } = req.body;
+    const { name, email, message, image } = req.body;
 
-      // Create a new feedback instance using the Feedback model
-      const feedback = new Feedback({
-          name,
-          email,
-          message,
-          image
-      });
+    // Create a new feedback instance using the Feedback model
+    const feedback = new Feedback({
+      name,
+      email,
+      message,
+      image
+    });
 
-      // Save the feedback to the MongoDB database
-      await feedback.save();
+    // Save the feedback to the MongoDB database
+    await feedback.save();
 
-      res.status(201).json({ success: true, message: 'Feedback saved successfully' });
+    res.status(201).json({ success: true, message: 'Feedback saved successfully' });
   } catch (error) {
-      console.error(error);
-      res.status(500).json({ success: false, message: 'Internal Server Error' });
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 });
+// for user requests
+router.post('/send-request', VerifyUser, async (req, res) => {
+  try {
+    const { phone } = req.body;
+
+    const existingRequest = await Request.findOne({ phone, user: req.userId });
+    if (existingRequest) {
+        return res.status(400).json({ message: 'Request with this phone number already exists.' });
+    }
+    
+    const request = new Request({
+      phone,
+      user: req.userId,
+    });
+
+    await request.save();
+
+    res.status(201).json({ success: true, message: 'request received! Stay tuned.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+});
+
+
 module.exports = router;
