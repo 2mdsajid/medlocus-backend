@@ -169,7 +169,7 @@ router.post('/update-test', VerifyUser, async (req, res) => {
       typeoftest,
       testid
     })
-    existingTest.usersattended.push(score_card)
+    if (existingTest) existingTest.usersattended.push(score_card)
 
     // INCORRECT AND OTHER TESTS DATA -- FOR PAID USERS ONLY
     const user = req.user
@@ -184,7 +184,7 @@ router.post('/update-test', VerifyUser, async (req, res) => {
         })
       }
     }
-    await existingTest.save()
+    if (existingTest) await existingTest.save()
     await analytic.save();
     return res.status(200).json({ message: 'Chapter scores updated successfully.' });
 
