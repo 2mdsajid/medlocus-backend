@@ -38,7 +38,7 @@ router.get(
 
     let testid = req.query.testid !== 'undefined' ? req.query.testid : null;
 
-    if (typeoftest === 'dailytest') {
+    if (['dailytest', 'weeklytest'].includes(typeoftest)) {
       testid = createTodayDateId();
     }
 
