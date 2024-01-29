@@ -298,10 +298,9 @@ router.get("/createdailytest", async (req, res) => {
     let questionsArray = [];
     const testid = createTodayDateId();
 
-    const type = req.query.t
-    if (!['dailytest', 'weeklytest'].includes(type)) {
-      return res.status(404).send({ message: "unknown type" })
-    }
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const type = (dayOfWeek === 0) ? 'weeklytest' : 'dailytest';
 
     const existingCustomTest = await CustomTest.findOne({ testid, type });
     if (existingCustomTest) {
@@ -358,22 +357,55 @@ router.get("/createdailytest", async (req, res) => {
     const idArray = questionsArray.map(question => question._id);
 
     const customTest = new CustomTest({
-      name: type === 'dailytest' ? 'Daily Test' : 'Weekly Test',
       type: type,
+      name: type === 'dailytest' ? 'Daily Test' : 'Weekly Test',
       testid: testid,
-      questionmodel: 'Question',
+      createdBy: '65a52a7308739d0aa044b295',
       questionsIds: idArray,
-      creator: {
-        model: 'User',
-        by: '659a346539a27408c615e708', //replace by the userid of medlocus account
-      },
+      questionmodel: 'Question',
     });
+
     await customTest.save();
     return res.status(200).json({
       message: type + " created successfully",
       dailytest: idArray.length,
     });
 
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+
+// invalidate daily test
+router.get("/invalidatedailytest", async (req, res) => {
+  try {
+
+    const dateid = createTodayDateId();
+
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const type = (dayOfWeek === 0) ? 'weeklytest' : 'dailytest';
+
+    await CustomTest.deleteMany({ type, archive: true });
+
+    const dailytest = await CustomTest.findOne({ testid: dateid, type });
+    if (!dailytest) {
+      return res.status(200).json({
+        message: "No Test Found",
+      });
+    }
+    if (dailytest.archive === true) {
+      return res.status(500).json({
+        message: "Test Already Archived",
+      });
+    }
+    dailytest.archive = true;
+    const savedtest = await dailytest.save();
+    return res.status(200).json({
+      message: "Daily test archived successfully",
+    });
   } catch (error) {
     return res.status(500).json({
       message: error.message,
@@ -640,37 +672,7 @@ router.post('/create-test', VerifyUser, async (req, res) => {
   }
 })
 
-router.get("/invalidatedailytest", async (req, res) => {
-  try {
-    const dateid = createTodayDateId();
 
-    const type = req.query.type
-    if (!['dailytest'].includes(type)) {
-      return res.status(404).send({ message: "unknown type" })
-    }
-
-    const dailytest = await CustomTest.findOne({ testid: dateid, type });
-    if (!dailytest) {
-      return res.status(200).json({
-        message: "No Test Found",
-      });
-    }
-    if (dailytest.archive === true) {
-      return res.status(500).json({
-        message: "Test Already Archived",
-      });
-    }
-    dailytest.archive = true;
-    const savedtest = await dailytest.save();
-    return res.status(200).json({
-      message: "Daily test archived successfully",
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: error.message,
-    });
-  }
-});
 
 router.get("/get-custom-tests", VerifyUser, async (req, res) => {
   try {
