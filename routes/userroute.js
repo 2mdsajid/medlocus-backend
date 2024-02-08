@@ -23,7 +23,7 @@ const Request = require("../schema/request");
 const Analytic = require("../schema/analytic");
 
 
-const { VerifyUser } = require("../middlewares/middlewares");
+const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 
 const { sendEmail, LOGO_URL } = require("./gmailroute");
 const createAdmin = async () => {
@@ -206,7 +206,6 @@ router.get("/get-anal/:userid", VerifyUser, async (req, res) => {
       })
       .select('question name email image payment.isPaid')
       .exec()
-
     const profile = {
       name: user.name,
       email: user.email,
@@ -218,6 +217,41 @@ router.get("/get-anal/:userid", VerifyUser, async (req, res) => {
   } catch (error) {
     console.error("Error calculating total score:", error);
     return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// get users for editing --- admin only
+router.get('/get-user-data/:userid', VerifyAdmin, async (req, res) => {
+  try {
+    const userId = req.params.userid;
+    if (!userId) {
+      return res.status(500).json({ message: "Not Found" });
+    }
+    const user = await User.findById(userId)
+      .select('_id name image email payment')
+      .exec()
+    res.status(200).json(user);
+  } catch (error) {
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+})
+
+// update user role
+router.post("/update-user", VerifyAdmin, async (req, res) => {
+  try {
+    const { id, role } = req.body;
+    if (!id || !role) return res.status(400).json({ message: 'Fuck bro you missing something fields.' });
+
+    const user = await User.findById(id)
+    if (!user) return res.status(404).json({ message: 'oopss missing' })
+
+    user.role = role
+    await user.save();
+
+    return res.status(201).json({ message: 'updated role successfully.' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Internal Server Error' });
   }
 });
 
@@ -457,7 +491,6 @@ router.get('/get-organization/:organizationid', async (req, res) => {
 
     //   // Update the fetched user object with the calculated result
     //   user.analytic.score = { t: totalSumT, c: totalSumC };
-    //   console.log("🚀 ~ router.get ~ user.analytic.score:", user.analytic.score)
     // });
 
     res.json(organization);
@@ -498,9 +531,9 @@ router.post('/send-request', VerifyUser, async (req, res) => {
 
     const existingRequest = await Request.findOne({ phone, user: req.userId });
     if (existingRequest) {
-        return res.status(400).json({ message: 'Request with this phone number already exists.' });
+      return res.status(400).json({ message: 'Request with this phone number already exists.' });
     }
-    
+
     const request = new Request({
       phone,
       user: req.userId,

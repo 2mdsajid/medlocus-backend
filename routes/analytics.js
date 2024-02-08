@@ -12,6 +12,7 @@ const DailyTest = require("../schema/dailytest");
 const Question = require("../schema/question");
 const Admin = require("../schema/admin");
 const User = require("../schema/user");
+const Organization = require("../schema/organization");
 const Analytic = require("../schema/analytic");
 const CustomTest = require("../schema/customtests");
 
@@ -215,6 +216,72 @@ router.post('/add-to-leaderboard', async (req, res) => {
     console.error(error);
     return res.status(500).json({ message: 'Internal Server Error' });
 
+  }
+})
+
+// get users for anaytics
+router.get("/get-stats", async (req, res) => {
+  try {
+    const targetUsersForThisSession = 669
+    const Users = await User.find()
+      .select('_id name email image role payment')
+
+    const allUsers = Users.map(user => ({
+      _id: user._id.toString(),
+      name: user.name,
+      email: user.email || null,
+      image: user.image || null,
+      role: user.role,
+      status: user.payment ? user.payment.isPaid : false,
+    }));
+
+    // Get the current date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); 
+
+    // Fetch users created today from the database
+    const usersToday = await User.find({ createdAt: { $gte: today } });
+    const totalUsersToday = usersToday.length;
+
+    // Group users by date and count the number of users for each date
+    // const usersByDate = allUsers.reduce((acc, user) => {
+    //   const userDate = user.createdAt.toISOString().split('T')[0]; // Extracting the date part
+    //   acc[userDate] = (acc[userDate] || 0) + 1;
+    //   return acc;
+    // }, {});
+
+    // const usersPerDayData = Object.entries(usersByDate).map(([date, numberOfUsers]) => ({
+    //   date,
+    //   'Number Of Users': numberOfUsers,
+    // }));
+
+    const organizations = await Organization.find()
+      .populate({
+        path: 'createdBy',
+        select: 'name',
+      })
+      .select('_id name createdBy users payment')
+      .exec()
+    console.log("🚀 ~ router.get ~ organizations:", organizations)
+
+    const allOrgs = organizations.map(org => ({
+      _id: org._id,
+      name: org.name,
+      createdBy: org.createdBy.name,
+      users: org.users.length,
+      status: org.payment.isPaid,
+    }));
+
+    return res.status(201).json({
+      allUsers,
+      allOrgs,
+      totalUsersToday,
+      targetUsersForThisSession
+    });
+
+  } catch (error) {
+    console.log("🚀 ~ router.get ~ error:", error)
+    return res.status(500).json({ message: 'Internal Server Error' });
   }
 })
 

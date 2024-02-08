@@ -57,13 +57,7 @@ const userSchema = new mongoose.Schema({
       type: Boolean,
       default: false
     },
-    method: {
-      type: String,
-      enum: ["organization", "premium", null],
-      default: null
-    },
-    organizationId: mongoose.Schema.Types.ObjectId,
-    transactionId: String,
+    paymentID: String,
     expireAt: Date,
   },
   isCompleted: {
