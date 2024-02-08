@@ -174,10 +174,9 @@ router.post('/update-test', VerifyUser, async (req, res) => {
 
     // INCORRECT AND OTHER TESTS DATA -- FOR PAID USERS ONLY
     const user = req.user
-
     const currentDateTime = new Date();
     const paymentExpireDateTime = new Date(user.payment.expireAt);
-    if (user.payment.isPaid && (currentDateTime > paymentExpireDateTime)) {
+    if (user.payment.isPaid && (currentDateTime < paymentExpireDateTime)) {
       // storing incorrect questions ids
       const newIncorrectAttempts = incorrectAttempt.filter(id => !analytic.incorrect.includes(id));
       analytic.incorrect.push(...newIncorrectAttempts);
@@ -203,7 +202,6 @@ router.post('/update-test', VerifyUser, async (req, res) => {
 router.post('/add-to-leaderboard', async (req, res) => {
   try {
     const { typeoftest, testid, score_card } = req.body;
-    console.log("🚀 ~ router.post ~ score_card:", score_card)
     if (!testid || !typeoftest || !score_card) {
       return res.status(404).json({ message: 'Unable to add to leaderboard' });
     }
@@ -267,8 +265,6 @@ router.get("/get-stats", async (req, res) => {
       })
       .select('_id name createdBy users payment')
       .exec()
-    console.log("🚀 ~ router.get ~ organizations:", organizations)
-
     const allOrgs = organizations.map(org => ({
       _id: org._id,
       name: org.name,
@@ -285,7 +281,6 @@ router.get("/get-stats", async (req, res) => {
     });
 
   } catch (error) {
-    console.log("🚀 ~ router.get ~ error:", error)
     return res.status(500).json({ message: 'Internal Server Error' });
   }
 })
