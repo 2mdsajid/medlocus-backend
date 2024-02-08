@@ -15,7 +15,10 @@ const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 const { limitermiddleware } = require("../middlewares/limiter");
 const Organization = require("../schema/organization");
 const Analytic = require("../schema/analytic");
-const { groupQuestionsBySubject } = require('../public/utils.js')
+const { groupQuestionsBySubject, generateVerificationKey } = require('../public/utils.js')
+
+const jwt = require("jsonwebtoken");
+
 
 const { sendEmail, LOGO_URL } = require("./gmailroute");
 const createTodayDateId = () => {
@@ -32,207 +35,135 @@ router.get(
   "/testquestions/:typeoftest",
   limitermiddleware,
   async (req, res) => {
-    const { model, num, sub, chap, unit, userid } = req.query;
-    const { typeoftest } = req.params;
-    const numberofquestions = parseInt(num);
+    try {
+      const { model, num, sub, chap, unit, userid } = req.query;
+      const { typeoftest } = req.params;
+      const numberofquestions = parseInt(num);
 
-    let testid = req.query.testid !== 'undefined' ? req.query.testid : null;
+      let testid = req.query.testid !== 'undefined' ? req.query.testid : null;
 
-    if (['dailytest', 'weeklytest'].includes(typeoftest)) {
-      testid = createTodayDateId();
-    }
-
-    const FIXED_TESTS = [
-      "chapterwise",
-      "unitwise",
-      "subjectwise",
-    ];
-
-    if (!typeoftest) {
-      return res.status(400).json({
-        message: "Missing some parameters",
-      });
-    }
-
-
-    if (["chapterwise", "unitwise", "subjectwise"].includes(typeoftest)) {
-      if (numberofquestions > 30) {
-        return res.status(400).json({
-          message: "Number of questions can't be more than 30",
-        });
+      if (['dailytest', 'weeklytest'].includes(typeoftest)) {
+        testid = createTodayDateId();
       }
-      if (numberofquestions < 5) {
+
+      const FIXED_TESTS = [
+        "chapterwise",
+        "unitwise",
+        "subjectwise",
+      ];
+
+      if (!typeoftest) {
         return res.status(400).json({
-          message: "Number of questions can't be less",
+          message: "Missing some parameters",
         });
       }
 
-      if (!sub || !(sub in SUBJECTWEIGHTAGE)) {
-        return res.status(400).json({
-          message: "Invalid or missing subject",
-        });
-      }
 
-      if (typeoftest === "unitwise") {
-        if (!unit || !(unit in UNITWEIGHTAGE[sub])) {
+      if (["chapterwise", "unitwise", "subjectwise"].includes(typeoftest)) {
+        if (numberofquestions > 30) {
           return res.status(400).json({
-            message: "Invalid or missing unit",
+            message: "Number of questions can't be more than 30",
+          });
+        }
+        if (numberofquestions < 5) {
+          return res.status(400).json({
+            message: "Number of questions can't be less",
+          });
+        }
+
+        if (!sub || !(sub in SUBJECTWEIGHTAGE)) {
+          return res.status(400).json({
+            message: "Invalid or missing subject",
+          });
+        }
+
+        if (typeoftest === "unitwise") {
+          if (!unit || !(unit in UNITWEIGHTAGE[sub])) {
+            return res.status(400).json({
+              message: "Invalid or missing unit",
+            });
+          }
+        }
+
+        if (typeoftest === "chapterwise") {
+          // make sure to revise the chapter
+          // chapter coming with ( ) replaced by (-)
+          // syllabus has ( ) & database has (-)
+          // so matching from the syllabus removing the (-) with ( )
+          if (!chap) {
+            return res.status(400).json({
+              message: "Invalid or missing chapter",
+            });
+          }
+        }
+
+        if (
+          !numberofquestions ||
+          numberofquestions > 50 ||
+          numberofquestions < 5
+        ) {
+          return res.status(400).json({
+            message: "Number of questions must be in range 5 - 50",
           });
         }
       }
 
-      if (typeoftest === "chapterwise") {
-        // make sure to revise the chapter
-        // chapter coming with ( ) replaced by (-)
-        // syllabus has ( ) & database has (-)
-        // so matching from the syllabus removing the (-) with ( )
-        if (!chap) {
-          return res.status(400).json({
-            message: "Invalid or missing chapter",
-          });
-        }
-      }
-
-      if (
-        !numberofquestions ||
-        numberofquestions > 50 ||
-        numberofquestions < 5
-      ) {
-        return res.status(400).json({
-          message: "Number of questions must be in range 5 - 50",
-        });
-      }
-    }
-
-    // /* SUBJECTWISE TEST ----------------------------------------- */
-    if (typeoftest === "subjectwise") {
-      const questions = await Question.aggregate([
-        {
-          $match: {
-            subject: sub,
-            "isverified.state": true,
-            "isadded.state": true,
-            "isreported.state": false,
-            "isflagged.state": false,
-          },
-        },
-        { $sample: { size: numberofquestions } },
-        {
-          $project: {
-            question: 1,
-            options: 1,
-            answer: 1,
-            explanation: 1,
-            subject: 1,
-            chapter: 1,
-            _id: 1,
-          },
-        },
-        {
-          $set: {
-            uans: "",
-            timetaken: 0,
-          },
-        },
-      ]).exec();
-      if (questions.length < 0) {
-        return res.status(400).json({
-          message: "no questions from this subject",
-        });
-      }
-      // const groupedQuestions = await groupQuestionsBySubject(questions);
-      return res.status(200).json({
-        message: "Chapter questions founddddd",
-        questions: questions,
-      });
-    }
-    ///* UNIT WISE */-------------------------------
-    else if (typeoftest === "unitwise") {
-      const questions = await Question.aggregate([
-        {
-          $match: {
-            subject: sub,
-            mergedunit: unit,
-            "isverified.state": true,
-            "isadded.state": true,
-            "isreported.state": false,
-            "isflagged.state": false,
-          },
-        },
-        { $sample: { size: numberofquestions } },
-        {
-          $project: {
-            question: 1,
-            options: 1,
-            answer: 1,
-            explanation: 1,
-            subject: 1,
-            chapter: 1,
-            images: 1,
-            _id: 1,
-          },
-        },
-      ]).exec();
-      if (questions.length === 0) {
-        return res.status(400).json({
-          message: "No questions found",
-        });
-      }
-      return res.status(200).json({
-        message: "unit questions founddddd",
-        questions: questions,
-      });
-    }
-    // /* CHAPTERWISE------------------------------------------------------ */
-    else if (typeoftest === "chapterwise") {
-      const questions = await Question.aggregate([
-        {
-          $match: {
-            subject: sub,
-            chapter: chap,
-            "isverified.state": true,
-            "isadded.state": true,
-            "isreported.state": false,
-            "isflagged.state": false,
-          },
-        },
-        { $sample: { size: numberofquestions } },
-        {
-          $project: {
-            question: 1,
-            options: 1,
-            answer: 1,
-            explanation: 1,
-            subject: 1,
-            chapter: 1,
-            images: 1,
-            _id: 1,
-          },
-        },
-      ]).exec();
-      if (questions.length === 0) {
-        return res.status(400).json({
-          message: "No questions found",
-        });
-      }
-      return res.status(200).json({
-        message: "unit questions founddddd",
-        questions: questions,
-      });
-    }
-    // /* MODEL TEST ---------------------------------- */
-    else if (typeoftest === "modeltest" && [50, 100, 150, 200].includes(numberofquestions)) {
-      const fraction = numberofquestions / 200;
-      const subjectKeys = Object.keys(SUBJECTWEIGHTAGE);
-      const questions = [];
-      for (const subject of subjectKeys) {
-        const selectedquestions = await Question.aggregate([
+      // /* SUBJECTWISE TEST ----------------------------------------- */
+      if (typeoftest === "subjectwise") {
+        const questions = await Question.aggregate([
           {
             $match: {
-              subject: subject,
+              subject: sub,
+              "isverified.state": true,
+              "isadded.state": true,
+              "isreported.state": false,
+              "isflagged.state": false,
             },
           },
-          { $sample: { size: SUBJECTWEIGHTAGE[subject] * fraction } },
+          { $sample: { size: numberofquestions } },
+          {
+            $project: {
+              question: 1,
+              options: 1,
+              answer: 1,
+              explanation: 1,
+              subject: 1,
+              chapter: 1,
+              _id: 1,
+            },
+          },
+          {
+            $set: {
+              uans: "",
+              timetaken: 0,
+            },
+          },
+        ]).exec();
+        if (questions.length < 0) {
+          return res.status(400).json({
+            message: "no questions from this subject",
+          });
+        }
+        // const groupedQuestions = await groupQuestionsBySubject(questions);
+        return res.status(200).json({
+          message: "Chapter questions founddddd",
+          questions: questions,
+        });
+      }
+      ///* UNIT WISE */-------------------------------
+      else if (typeoftest === "unitwise") {
+        const questions = await Question.aggregate([
+          {
+            $match: {
+              subject: sub,
+              mergedunit: unit,
+              "isverified.state": true,
+              "isadded.state": true,
+              "isreported.state": false,
+              "isflagged.state": false,
+            },
+          },
+          { $sample: { size: numberofquestions } },
           {
             $project: {
               question: 1,
@@ -246,48 +177,145 @@ router.get(
             },
           },
         ]).exec();
-        questions.push(...selectedquestions);
-      }
-      return res.status(200).json({ questions });
-    }
-
-    // fetch tests by their ids -- incase the above did not work
-    else {
-
-      if (!testid) {
-        return res.status(400).json({
-          message: "Can't find testid",
+        if (questions.length === 0) {
+          return res.status(400).json({
+            message: "No questions found",
+          });
+        }
+        return res.status(200).json({
+          message: "unit questions founddddd",
+          questions: questions,
         });
       }
-
-      // for daily tests only -- to get current date from server not from client -- timezones may vary
-      const test = await CustomTest.findOne({ testid: testid, type: typeoftest });
-      if (!test) {
-        return res.status(404).json({ message: "Test not foundd" });
-      }
-
-      const userExists = test.usersattended.some((user) => user.userid === userid);
-      if (userExists) {
-        return res.status(400).json({
-          message: "You Have Already Attended This Test",
+      // /* CHAPTERWISE------------------------------------------------------ */
+      else if (typeoftest === "chapterwise") {
+        const questions = await Question.aggregate([
+          {
+            $match: {
+              subject: sub,
+              chapter: chap,
+              "isverified.state": true,
+              "isadded.state": true,
+              "isreported.state": false,
+              "isflagged.state": false,
+            },
+          },
+          { $sample: { size: numberofquestions } },
+          {
+            $project: {
+              question: 1,
+              options: 1,
+              answer: 1,
+              explanation: 1,
+              subject: 1,
+              chapter: 1,
+              images: 1,
+              _id: 1,
+            },
+          },
+        ]).exec();
+        if (questions.length === 0) {
+          return res.status(400).json({
+            message: "No questions found",
+          });
+        }
+        return res.status(200).json({
+          message: "unit questions founddddd",
+          questions: questions,
         });
       }
+      // /* MODEL TEST ---------------------------------- */
+      else if (typeoftest === "modeltest" && [50, 100, 150, 200].includes(numberofquestions)) {
+        const fraction = numberofquestions / 200;
+        const subjectKeys = Object.keys(SUBJECTWEIGHTAGE);
+        const questions = [];
+        for (const subject of subjectKeys) {
+          const selectedquestions = await Question.aggregate([
+            {
+              $match: {
+                subject: subject,
+              },
+            },
+            { $sample: { size: SUBJECTWEIGHTAGE[subject] * fraction } },
+            {
+              $project: {
+                question: 1,
+                options: 1,
+                answer: 1,
+                explanation: 1,
+                subject: 1,
+                chapter: 1,
+                images: 1,
+                _id: 1,
+              },
+            },
+          ]).exec();
+          questions.push(...selectedquestions);
+        }
+        return res.status(200).json({ questions });
+      }
 
-      test.usersconnected.push(userid);
-      const savedest = await test.save();
+      // fetch tests by their ids -- incase the above did not work
+      // for custom tests especially
+      else {
 
-      const questionmodel = test.questionmodel;
+        // checking for testid -- incase
+        if (!testid) {
+          return res.status(400).json({
+            message: "Can't find testid",
+          });
+        }
 
-      const test2 = await CustomTest.findOne({ testid: testid, type: typeoftest })
-        .populate({
-          path: 'questionsIds',
-          model: questionmodel,
-          select: '_id question options answer explanation subject chapter mergedunit',
-        })
-        .exec();
-      const questions = test2.questionsIds
-      // questions = await groupQuestionsBySubject(ungroupedQuestions);
-      return res.status(200).json({ questions });
+        // checking for authorization in the user request fo ruserid
+        // i guess this will prevent spamming as id can be created only in the frontend
+        const bearer = req.headers.authorization;
+        const token = bearer ? bearer.split(" ")[1] : null;
+        if (!token) return res.status(401).json({ message: "Invalid Authentication" });
+
+        const secretkey = process.env.JWT_SECRET_KEY;
+        const userFromAuth = jwt.verify(token, secretkey);
+        const userid = userFromAuth.id
+        console.log("🚀 ~ userid:", userid)
+        if (!userid) return res.status(401).json({ message: "Invalid Authentication" });
+
+
+        // for daily tests only -- to get current date from server not from client -- timezones may vary
+        const test = await CustomTest.findOne({ testid: testid, type: typeoftest });
+        if (!test) {
+          return res.status(404).json({ message: "Test not foundd" });
+        }
+
+        // checking cross-authorization for userid in usersconnected
+        if (!test.usersconnected.includes(userid)) {
+          return res.status(400).json({
+            message: "Broken url found. Please follow the original test link for attempting tests!",
+          });
+        }
+
+        // checking if user has already attended the test
+        const userExists = test.usersattended.some((user) => user.userid === userid);
+        if (userExists) {
+          return res.status(400).json({
+            message: "You Have Already Attended This Test",
+          });
+        }
+
+        const questionmodel = test.questionmodel;
+
+        const test2 = await CustomTest.findOne({ testid: testid, type: typeoftest })
+          .populate({
+            path: 'questionsIds',
+            model: questionmodel,
+            select: '_id question options answer explanation subject chapter mergedunit',
+          })
+          .exec();
+        const questions = test2.questionsIds
+        // questions = await groupQuestionsBySubject(ungroupedQuestions);
+        return res.status(200).json({ userid, questions });
+      }
+    } catch (error) {
+      console.log("🚀 ~ error:", error)
+      return res.status(400).json({ message : 'Internal Server Error' });
     }
   }
 );
@@ -602,7 +630,7 @@ router.post("/create-custom-modeltest", VerifyUser, async (req, res) => {
 // for creating all types of test from the backend
 router.post('/create-test', VerifyUser, async (req, res) => {
   try {
-    const { name, type, questiontype, isOrg, questions } = req.body;
+    const { name, type, questiontype, isOrg, questions, isLocked } = req.body;
     const formattedName = name.replace(/\s+/g, '-');
     const testid = formattedName
     const userid = req.userId
@@ -653,8 +681,18 @@ router.post('/create-test', VerifyUser, async (req, res) => {
       questionmodel: questiontype === 'withid' ? 'Question' : 'Outquestion',
       isOrg: isOrg ? isOrg : { state: false },
     });
-    await customTest.save();
 
+    let lockedTestCode
+    if (isLocked.state) {
+      lockedTestCode = generateVerificationKey(6)
+      let lockedObject = {
+        ...isLocked,
+        code: lockedTestCode
+      }
+      customTest.isLocked = lockedObject
+    }
+
+    await customTest.save();
     if (isOrg && isOrg.state === true) {
       organization.tests.push(customTest._id);
       await organization.save();
@@ -663,6 +701,7 @@ router.post('/create-test', VerifyUser, async (req, res) => {
     return res.status(200).json({
       message: type + " created successfully",
       url: `${process.env.FRONTEND}/tests/${type}/${testid}?by=${username.toLowerCase().replace(/\s+/g, '-')}`,
+      code: lockedTestCode
     });
   } catch (error) {
     console.error(error);
@@ -730,6 +769,19 @@ router.get("/get-custom-tests/:type", async (req, res) => {
 router.get('/get-custom-tests/:type/:testid', async (req, res) => {
   try {
     const { type, testid } = req.params
+
+    // checking for authorization in the user request fo ruserid
+    // i guess this will prevent spamming as id can be created only in the frontend
+    const bearer = req.headers.authorization;
+    const token = bearer ? bearer.split(" ")[1] : null;
+    if (!token) return res.status(401).json({ message: "Invalid Authentication" });
+
+    const secretkey = process.env.JWT_SECRET_KEY;
+    const userFromAuth = jwt.verify(token, secretkey);
+    const userid = userFromAuth.id
+    console.log("🚀 ~ router.get ~ userid:", userid)
+    if (!userid) return res.status(401).json({ message: "Invalid Authentication" });
+
     const customTest = await CustomTest.findOne({ type, testid })
       .populate({
         path: "createdBy",
@@ -739,11 +791,33 @@ router.get('/get-custom-tests/:type/:testid', async (req, res) => {
         path: "isOrg.by",
         select: "name"
       })
-      .select('image name type createdBy testid questionsIds isLocked archive')
+      .select('image name type createdBy testid questionsIds isLocked archive usersconnected')
       .exec();
 
     if (!customTest) {
       return res.status(300).json({ message: 'No test available' })
+    }
+
+    // CHECKING FOR ACCESS TO TESTS FOR USERS
+    let isAllowed = true
+    const isLocked = customTest.isLocked
+    if (isLocked.state) {
+      const { type } = isLocked
+      if (type === 'private' && customTest.createdBy !== userid) {
+        isAllowed = false
+      } else if (type === 'org') { //checking if the user is in the org before accessing the test
+        const organization = await Organization.findById(customTest.isOrg.by)
+        const users = organization.users
+        const moderators = organization.moderators
+        const creator = organization.createdBy
+        if (!users.includes(userid) && !moderators.includes(userid) && userid !== creator) isAllowed = false
+      }
+    }
+
+    // adding user to usersconnected for cross-authentication --- only if the user is allowed
+    if (isAllowed) {
+      customTest.usersconnected.push(userid)
+      await customTest.save()
     }
 
     const modifiedCustomTests = {
@@ -756,18 +830,18 @@ router.get('/get-custom-tests/:type/:testid', async (req, res) => {
       },
       numberOfQuestions: customTest.questionsIds.length,
       type: customTest.type,
-      isLocked: customTest.isLocked
+      isLocked: customTest.isLocked,
+      isAllowed,
+      testToken: token
     }
-
     return res.status(200).json(modifiedCustomTests)
 
   } catch (error) {
-    console.error('Error retrieving chapters:', error);
+    console.error('Error :', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
 
-// to retrive tests for tests as well as preview before test
 // for results
 router.get('/get-customtest/:id', async (req, res) => {
   try {

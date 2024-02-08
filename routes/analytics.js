@@ -174,7 +174,10 @@ router.post('/update-test', VerifyUser, async (req, res) => {
 
     // INCORRECT AND OTHER TESTS DATA -- FOR PAID USERS ONLY
     const user = req.user
-    if (user.payment.isPaid) {
+
+    const currentDateTime = new Date();
+    const paymentExpireDateTime = new Date(user.payment.expireAt);
+    if (user.payment.isPaid && (currentDateTime > paymentExpireDateTime)) {
       // storing incorrect questions ids
       const newIncorrectAttempts = incorrectAttempt.filter(id => !analytic.incorrect.includes(id));
       analytic.incorrect.push(...newIncorrectAttempts);
@@ -185,6 +188,7 @@ router.post('/update-test', VerifyUser, async (req, res) => {
         })
       }
     }
+
     if (existingTest) await existingTest.save()
     await analytic.save();
     return res.status(200).json({ message: 'Chapter scores updated successfully.' });
@@ -199,6 +203,7 @@ router.post('/update-test', VerifyUser, async (req, res) => {
 router.post('/add-to-leaderboard', async (req, res) => {
   try {
     const { typeoftest, testid, score_card } = req.body;
+    console.log("🚀 ~ router.post ~ score_card:", score_card)
     if (!testid || !typeoftest || !score_card) {
       return res.status(404).json({ message: 'Unable to add to leaderboard' });
     }
@@ -237,7 +242,7 @@ router.get("/get-stats", async (req, res) => {
 
     // Get the current date
     const today = new Date();
-    today.setHours(0, 0, 0, 0); 
+    today.setHours(0, 0, 0, 0);
 
     // Fetch users created today from the database
     const usersToday = await User.find({ createdAt: { $gte: today } });

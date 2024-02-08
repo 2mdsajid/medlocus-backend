@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { generateVerificationKey } = require('../public/utils')
 
 const userSchema = new mongoose.Schema({
     userid: {
@@ -45,9 +46,18 @@ const customTestSchema = new mongoose.Schema({
             type: Boolean,
             default: false,
         },
+        type: {
+            type: String,
+            required: function () {
+                return this.isLocked.state; // Will be required if state is true
+            },
+            enum: ['org', 'code', 'private'] // org = for orgnanization users only, code = access via code
+        },
         code: {
             type: String,
-            default: '',
+            required: function () {
+                return this.isLocked.state; // Will be required if state is true
+            },
         }
     },
     questionmodel: {
