@@ -275,7 +275,6 @@ router.get(
         const secretkey = process.env.JWT_SECRET_KEY;
         const userFromAuth = jwt.verify(token, secretkey);
         const userid = userFromAuth.id
-        console.log("🚀 ~ userid:", userid)
         if (!userid) return res.status(401).json({ message: "Invalid Authentication" });
 
 
@@ -314,7 +313,6 @@ router.get(
         return res.status(200).json({ userid, questions });
       }
     } catch (error) {
-      console.log("🚀 ~ error:", error)
       return res.status(400).json({ message : 'Internal Server Error' });
     }
   }
@@ -779,7 +777,6 @@ router.get('/get-custom-tests/:type/:testid', async (req, res) => {
     const secretkey = process.env.JWT_SECRET_KEY;
     const userFromAuth = jwt.verify(token, secretkey);
     const userid = userFromAuth.id
-    console.log("🚀 ~ router.get ~ userid:", userid)
     if (!userid) return res.status(401).json({ message: "Invalid Authentication" });
 
     const customTest = await CustomTest.findOne({ type, testid })

@@ -23,9 +23,10 @@ const Request = require("../schema/request");
 const Analytic = require("../schema/analytic");
 
 
-const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
+const { VerifyUser, VerifyAdmin, VerifyModerator } = require("../middlewares/middlewares");
 
 const { sendEmail, LOGO_URL } = require("./gmailroute");
+const CustomTest = require("../schema/customtests");
 const createAdmin = async () => {
   const createdadmin = new Admin({
     _id: '65929d68e64ad4813aa6b911',
@@ -123,14 +124,19 @@ router.get("/get-anal", VerifyUser, async (req, res) => {
         path: 'tests.test',
         select: '_id name type'
       })
+      .populate({
+        path: 'incorrect',
+        select: 'question chapter subject'
+      })
       .exec()
 
     if (!userAnalytic) return res.status(404).json({ message: "User not found" });
 
+    // calculating chapters score
     const chapterscores = userAnalytic.chapterscores[0];
     const chapterNames = Object.keys(chapterscores);
 
-    const totalScores = chapterNames.map((chapter) => {
+    const totalChapterScores = chapterNames.map((chapter) => {
       const chapterData = chapterscores[chapter];
       const totalCorrect = chapterData.reduce((sum, entry) => sum + entry.c, 0);
       const totalTotal = chapterData.reduce((sum, entry) => sum + entry.t, 0);
@@ -144,8 +150,8 @@ router.get("/get-anal", VerifyUser, async (req, res) => {
       };
     });
 
-
-    const processedTestsData = userAnalytic.tests.map(test => ({
+    // trimming the tests data for final shape
+    const attendedTests = userAnalytic.tests.map(test => ({
       score: `${test.score.c}/${test.score.t}`,
       name: test.test.name,
       type: test.test.type,
@@ -153,17 +159,31 @@ router.get("/get-anal", VerifyUser, async (req, res) => {
       timetaken: `${test.timetaken.t} (${test.timetaken.a} av)`
     }));
 
-    const user = await User.findOne({ _id: userId })
-      .populate({
-        path: 'questions',
-        select: 'question isverified.state isverified.message'
-      })
-      .select('question')
-      .exec()
+    // incorrect questions
+    const incorrectQuestions = userAnalytic.incorrect || []
 
 
-    const questionsReported = user.questions
-    return res.status(200).json({ chapterScores: totalScores, questionsReported, processedTestsData });
+    // const user = await User.findOne({ _id: userId })
+    //   .populate({
+    //     path: 'questions',
+    //     select: 'question isverified.state isverified.message'
+    //   })
+    //   .select('question')
+    //   .exec()
+    // const questionsReported = user.questions
+
+    let testsCreated = await CustomTest.find({
+      createdBy: userId
+    }).select('_id name testid type date') || []
+
+
+    return res.status(200).json({
+      chapterScores: totalChapterScores,
+      testsCreated,
+      attendedTests,
+      incorrectQuestions
+    });
+
   } catch (error) {
     console.error("Error calculating total score:", error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -178,14 +198,34 @@ router.get("/get-anal/:userid", VerifyUser, async (req, res) => {
       return res.status(301).json({ message: "Oopps forbidden" });
     }
     const userId = req.params.userid;
-    const userAnalytic = await Analytic.findOne({ userid: userId });
+    const userAnalytic = await Analytic.findOne({ userid: userId })
+      .populate({
+        path: 'tests.test',
+        select: '_id name type'
+      })
+      .populate({
+        path: 'incorrect',
+        select: 'question chapter subject'
+      })
+      .populate({
+        path: 'userid',
+        select: 'name email image payment'
+      })
+      .exec()
 
-    if (!userAnalytic) return res.status(404).json({ message: "User not found" });
+    // getting the user data only --- in case no userAnalytic present -- user has not given any test
+    if (!userAnalytic) {
+      const userProfile = await User.findById(userId)
+        .select('name image email payment')
+        .exec()
+      return res.status(200).json({ userProfile })
+    }
 
+    // calculating chapters score
     const chapterscores = userAnalytic.chapterscores[0];
     const chapterNames = Object.keys(chapterscores);
 
-    const totalScores = chapterNames.map((chapter) => {
+    const totalChapterScores = chapterNames.map((chapter) => {
       const chapterData = chapterscores[chapter];
       const totalCorrect = chapterData.reduce((sum, entry) => sum + entry.c, 0);
       const totalTotal = chapterData.reduce((sum, entry) => sum + entry.t, 0);
@@ -199,21 +239,34 @@ router.get("/get-anal/:userid", VerifyUser, async (req, res) => {
       };
     });
 
-    const user = await User.findOne({ _id: userId })
-      .populate({
-        path: 'questions',
-        select: 'question isverified.state isverified.message'
-      })
-      .select('question name email image payment.isPaid')
-      .exec()
-    const profile = {
+    // trimming the tests data for final shape
+    const attendedTests = userAnalytic.tests.map(test => ({
+      score: `${test.score.c}/${test.score.t}`,
+      name: test.test.name,
+      type: test.test.type,
+      _id: test.test._id,
+      timetaken: `${test.timetaken.t} (${test.timetaken.a} av)`
+    })) || []
+
+    // incorrect questions
+    const incorrectQuestions = userAnalytic.incorrect || []
+
+    // getting basic user info
+    const user = userAnalytic.userid
+    const userProfile = {
       name: user.name,
       email: user.email,
       image: user.image,
-      isSubscribed: user.payment.isPaid
+      payment: user.payment
     }
-    const questionsReported = user.questions
-    return res.status(200).json({ chapterScores: totalScores, questionsReported, profile });
+
+    return res.status(200).json({
+      chapterScores: totalChapterScores,
+      attendedTests,
+      incorrectQuestions,
+      userProfile
+    });
+
   } catch (error) {
     console.error("Error calculating total score:", error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -427,10 +480,12 @@ router.get('/get-organizations/', VerifyUser, async (req, res) => {
   }
 });
 
-
-router.get('/get-organization/:organizationid', async (req, res) => {
+// fetch a single organization
+// only for moderators -- 
+router.get('/get-organization/:organizationid', VerifyUser, async (req, res) => {
   try {
     const { organizationid } = req.params;
+    console.log("🚀 ~ router.get ~ organizationid:", organizationid)
     if (!organizationid) return res.status(404).json({ message: 'your organization id is missing' });
 
     const organization = await Organization
@@ -453,6 +508,7 @@ router.get('/get-organization/:organizationid', async (req, res) => {
       })
       .exec();
 
+      console.log("🚀 ~ router.get ~ organization:", organization)
     if (!organization) {
       return res.status(404).json({ message: 'Organization not found' });
     }

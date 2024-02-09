@@ -63,19 +63,19 @@ const VerifyMedlocusAdmin = async (req, res, next) => {
   }
 };
 
-// midddown function for testing purposes only   for   testing purposes 
 
-const VerifyUser = async (req, res, next) => {
+const VerifyModerator = async (req, res, next) => {
   try {
     const bearer = req.headers.authorization;
     const token = bearer ? bearer.split(" ")[1] : null;
-    if (!token) return res.status(401).json({ message: "Invalid Authentication" });
+    if (!token) return res.status(401).json({ message: "Invalid Authentication 1" });
 
     const secretkey = process.env.JWT_SECRET_KEY;
     const userFromAuth = jwt.verify(token, secretkey);
-
     const user = await User.findById(userFromAuth._id).select('_id name email image role key questions discussions payment')
-    if (!user) return res.status(403).json({ message: "Invalid Authentication" });
+    if (!user) return res.status(403).json({ message: "Invalid Authorization 2" });
+
+    if (!['admin', 'moderator', 'sajid'].includes(user.role)) res.status(403).json({ message: "Invalid Authorization" });
 
     req.userId = user._id;
     req.role = user.role;
@@ -83,8 +83,29 @@ const VerifyUser = async (req, res, next) => {
     next();
 
   } catch (error) {
-    return res.status(401).json({ message: "Invalid Authentication" });
+    return res.status(401).json({ message: "Invalid Authentication 3" });
   }
 };
 
-module.exports = { VerifyAdmin, VerifyUser, VerifyMedlocusAdmin };
+const VerifyUser = async (req, res, next) => {
+  try {
+    const bearer = req.headers.authorization;
+    const token = bearer ? bearer.split(" ")[1] : null;
+    if (!token) return res.status(401).json({ message: "Invalid Authentication 1" });
+
+    const secretkey = process.env.JWT_SECRET_KEY;
+    const userFromAuth = jwt.verify(token, secretkey);
+    const user = await User.findById(userFromAuth._id).select('_id name email image role key questions discussions payment')
+    if (!user) return res.status(403).json({ message: "Invalid Authentication 2" });
+
+    req.userId = user._id;
+    req.role = user.role;
+    req.user = user
+    next();
+
+  } catch (error) {
+    return res.status(401).json({ message: "Invalid Authentication 3" });
+  }
+};
+
+module.exports = { VerifyAdmin, VerifyUser, VerifyMedlocusAdmin,VerifyModerator };
