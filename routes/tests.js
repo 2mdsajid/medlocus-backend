@@ -1,12 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const mongoose = require('mongoose');
-const {
-  UNITWEIGHTAGE,
-  SUBJECTWEIGHTAGE,
-  UPDATED_SYLLABUS,
-  data_series_subjectwise,
-} = require("../public/syllabus.js");
+
 const CustomTest = require("../schema/customtests");
 const Question = require("../schema/question");
 const Outquestion = require("../schema/outquestion");
@@ -21,6 +16,14 @@ const jwt = require("jsonwebtoken");
 
 
 const { sendEmail, LOGO_URL } = require("./gmailroute");
+
+// getting from syllabus methods
+const { getSubjectWeightage, getUnitsWeightage, getUnitsBySubject } = require("../public/new-syllabus.js");
+const subjectWeightage = getSubjectWeightage()
+const unitsBySubject = getUnitsBySubject()
+const unitWeightage = getUnitsWeightage()
+
+
 const createTodayDateId = () => {
   const currentDate = new Date();
   const year = currentDate.getFullYear();
@@ -39,6 +42,7 @@ router.get(
       const { model, num, sub, chap, unit, userid } = req.query;
       const { typeoftest } = req.params;
       const numberofquestions = parseInt(num);
+
 
       let testid = req.query.testid !== 'undefined' ? req.query.testid : null;
 
@@ -71,14 +75,14 @@ router.get(
           });
         }
 
-        if (!sub || !(sub in SUBJECTWEIGHTAGE)) {
+        if (!sub || !(sub in subjectWeightage)) {
           return res.status(400).json({
             message: "Invalid or missing subject",
           });
         }
 
         if (typeoftest === "unitwise") {
-          if (!unit || !(unit in UNITWEIGHTAGE[sub])) {
+          if (!unit || !(unitsBySubject[sub].includes(unit))) {
             return res.status(400).json({
               message: "Invalid or missing unit",
             });
@@ -227,7 +231,7 @@ router.get(
       // /* MODEL TEST ---------------------------------- */
       else if (typeoftest === "modeltest" && [50, 100, 150, 200].includes(numberofquestions)) {
         const fraction = numberofquestions / 200;
-        const subjectKeys = Object.keys(SUBJECTWEIGHTAGE);
+        const subjectKeys = Object.keys(subjectWeightage);
         const questions = [];
         for (const subject of subjectKeys) {
           const selectedquestions = await Question.aggregate([
@@ -236,7 +240,7 @@ router.get(
                 subject: subject,
               },
             },
-            { $sample: { size: SUBJECTWEIGHTAGE[subject] * fraction } },
+            { $sample: { size: subjectWeightage[subject] * fraction } },
             {
               $project: {
                 question: 1,
@@ -313,7 +317,7 @@ router.get(
         return res.status(200).json({ userid, questions });
       }
     } catch (error) {
-      return res.status(400).json({ message : 'Internal Server Error' });
+      return res.status(400).json({ message: 'Internal Server Error' });
     }
   }
 );
@@ -333,13 +337,13 @@ router.get("/createdailytest", async (req, res) => {
       return res.status(400).json({ message: "Test with the same name already exists." });
     }
 
-    for (const category in UNITWEIGHTAGE) {
-      if (type === 'dailytest') {
-        // to fetch 10 questions from eaxh subject, as units failed 
+    // to fetch 10 questions from eaxh subject, as units failed 
+    if (type === 'dailytest') {
+      for (subject in subjectWeightage) {
         const questions = await Question.aggregate([
           {
             $match: {
-              subject: category,
+              subject: subject,
               "isverified.state": true,
               "isadded.state": true,
               "isreported.state": false,
@@ -354,32 +358,33 @@ router.get("/createdailytest", async (req, res) => {
           },
         ]).exec();
         questionsArray.push(...questions);
-      } else {
-        // to get from each unit for 200 questions
-        for (const unit in UNITWEIGHTAGE[category]) {
-          const weightage = UNITWEIGHTAGE[category][unit]
-          const questions = await Question.aggregate([
-            {
-              $match: {
-                mergedunit: unit,
-                "isverified.state": true,
-                "isadded.state": true,
-                "isreported.state": false,
-                "isflagged.state": false,
-              },
+      }
+    } else {
+      // to get from each unit for 200 questions
+      for (const unit in unitWeightage) {
+        const weightage = unitWeightage[unit]
+        const questions = await Question.aggregate([
+          {
+            $match: {
+              mergedunit: unit,
+              "isverified.state": true,
+              "isadded.state": true,
+              "isreported.state": false,
+              "isflagged.state": false,
             },
-            { $sample: { size: weightage } },
-            {
-              $project: {
-                _id: 1,
-              },
+          },
+          { $sample: { size: weightage } },
+          {
+            $project: {
+              _id: 1,
             },
-          ]).exec();
-          questionsArray.push(...questions);
-          questions.length === 0 && console.log(unit, questions.length); //console the unit with zero questions fetched
-        }
+          },
+        ]).exec();
+        questionsArray.push(...questions);
+        questions.length === 0 && console.log(unit, questions.length); //console the unit with zero questions fetched
       }
     }
+
     const idArray = questionsArray.map(question => question._id);
 
     const customTest = new CustomTest({
@@ -409,7 +414,6 @@ router.get("/invalidatedailytest", async (req, res) => {
   try {
 
     const dateid = createTodayDateId();
-
     const today = new Date();
     const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
     const type = (dayOfWeek === 0) ? 'weeklytest' : 'dailytest';
@@ -453,9 +457,9 @@ router.get("/get-questions-for-modeltest", VerifyUser, async (req, res) => {
 
     const number = parseInt(num)
     const fraction = number / 200
-    for (const category in SUBJECTWEIGHTAGE) {
-      if ([50, 75, 100, 125, 150, 175].includes(number)) {
-        // to fetch 10 questions from eaxh subject, as units failed 
+    if ([50, 75, 100, 125, 150, 175].includes(number)) {
+      // to fetch 10 questions from eaxh subject, as units failed 
+      for (const category in subjectWeightage) {
         const questions = await Question.aggregate([
           {
             $match: {
@@ -466,7 +470,36 @@ router.get("/get-questions-for-modeltest", VerifyUser, async (req, res) => {
               "isflagged.state": false,
             },
           },
-          { $sample: { size: SUBJECTWEIGHTAGE[category] * fraction } },
+          { $sample: { size: subjectWeightage[category] * fraction } },
+          {
+            $project: {
+              _id: 1,
+              question: 1,
+              options: 1,
+              answer: 1,
+              explanation: 1,
+              images: 1,
+              subject: 1,
+            },
+          },
+        ]).exec();
+        questionsArray.push(...questions)
+      }
+    } else {
+      // to get from each unit for 200 questions
+      for (const unit in unitWeightage) {
+        const weightage = unitWeightage[unit]
+        const questions = await Question.aggregate([
+          {
+            $match: {
+              mergedunit: unit,
+              "isverified.state": true,
+              "isadded.state": true,
+              "isreported.state": false,
+              "isflagged.state": false,
+            },
+          },
+          { $sample: { size: weightage } },
           {
             $project: {
               _id: 1,
@@ -480,36 +513,7 @@ router.get("/get-questions-for-modeltest", VerifyUser, async (req, res) => {
           },
         ]).exec();
         questionsArray.push(...questions);
-      } else {
-        // to get from each unit for 200 questions
-        for (const unit in UNITWEIGHTAGE[category]) {
-          const weightage = UNITWEIGHTAGE[category][unit]
-          const questions = await Question.aggregate([
-            {
-              $match: {
-                mergedunit: unit,
-                "isverified.state": true,
-                "isadded.state": true,
-                "isreported.state": false,
-                "isflagged.state": false,
-              },
-            },
-            { $sample: { size: weightage } },
-            {
-              $project: {
-                _id: 1,
-                question: 1,
-                options: 1,
-                answer: 1,
-                explanation: 1,
-                images: 1,
-                subject: 1,
-              },
-            },
-          ]).exec();
-          questionsArray.push(...questions);
-          questions.length === 0 && console.log(unit, questions.length); //console the unit with zero questions fetched
-        }
+        questions.length === 0 && console.log(unit, questions.length); //console the unit with zero questions fetched
       }
     }
 
@@ -545,9 +549,9 @@ router.post("/create-custom-modeltest", VerifyUser, async (req, res) => {
     }
 
     const fraction = number / 200
-    for (const category in SUBJECTWEIGHTAGE) {
-      if ([50, 75, 100, 125, 150, 175].includes(number)) {
-        // to fetch 10 questions from eaxh subject, as units failed 
+    if ([50, 75, 100, 125, 150, 175].includes(number)) {
+      // to fetch 10 questions from eaxh subject, as units failed 
+      for (const category in subjectWeightage) {
         const questions = await Question.aggregate([
           {
             $match: {
@@ -558,7 +562,30 @@ router.post("/create-custom-modeltest", VerifyUser, async (req, res) => {
               "isflagged.state": false,
             },
           },
-          { $sample: { size: SUBJECTWEIGHTAGE[category] * fraction } },
+          { $sample: { size: subjectWeightage[category] * fraction } },
+          {
+            $project: {
+              _id: 1,
+            },
+          },
+        ]).exec();
+        questionsArray.push(...questions)
+      }
+    } else {
+      // to get from each unit for 200 questions
+      for (const unit in unitWeightage) {
+        const weightage = unitWeightage[unit]
+        const questions = await Question.aggregate([
+          {
+            $match: {
+              mergedunit: unit,
+              "isverified.state": true,
+              "isadded.state": true,
+              "isreported.state": false,
+              "isflagged.state": false,
+            },
+          },
+          { $sample: { size: weightage } },
           {
             $project: {
               _id: 1,
@@ -566,32 +593,10 @@ router.post("/create-custom-modeltest", VerifyUser, async (req, res) => {
           },
         ]).exec();
         questionsArray.push(...questions);
-      } else {
-        // to get from each unit for 200 questions
-        for (const unit in UNITWEIGHTAGE[category]) {
-          const weightage = UNITWEIGHTAGE[category][unit]
-          const questions = await Question.aggregate([
-            {
-              $match: {
-                mergedunit: unit,
-                "isverified.state": true,
-                "isadded.state": true,
-                "isreported.state": false,
-                "isflagged.state": false,
-              },
-            },
-            { $sample: { size: weightage } },
-            {
-              $project: {
-                _id: 1,
-              },
-            },
-          ]).exec();
-          questionsArray.push(...questions);
-          questions.length === 0 && console.log(unit, questions.length); //console the unit with zero questions fetched
-        }
+        questions.length === 0 && console.log(unit, questions.length); //console the unit with zero questions fetched
       }
     }
+
 
     const idArray = questionsArray.map(question => question._id);
 
@@ -782,14 +787,15 @@ router.get('/get-custom-tests/:type/:testid', async (req, res) => {
     const customTest = await CustomTest.findOne({ type, testid })
       .populate({
         path: "createdBy",
-        select: "name email image"
+        select: "_id name email image",
+        options: {lean: true},
       })
       .populate({
         path: "isOrg.by",
         select: "name"
       })
       .select('image name type createdBy testid questionsIds isLocked archive usersconnected')
-      .exec();
+      .exec() //.lean() will return a plain object so can't save or modify the data in db
 
     if (!customTest) {
       return res.status(300).json({ message: 'No test available' })
@@ -800,7 +806,7 @@ router.get('/get-custom-tests/:type/:testid', async (req, res) => {
     const isLocked = customTest.isLocked
     if (isLocked.state) {
       const { type } = isLocked
-      if (type === 'private' && customTest.createdBy !== userid) {
+      if (type === 'private' && customTest.createdBy._id.toString() !== userid) {
         isAllowed = false
       } else if (type === 'org') { //checking if the user is in the org before accessing the test
         const organization = await Organization.findById(customTest.isOrg.by)
@@ -814,7 +820,8 @@ router.get('/get-custom-tests/:type/:testid', async (req, res) => {
     // adding user to usersconnected for cross-authentication --- only if the user is allowed
     if (isAllowed) {
       customTest.usersconnected.push(userid)
-      await customTest.save()
+      const saved = await customTest.save()
+      console.log("🚀 ~ router.get ~ saved:", saved)
     }
 
     const modifiedCustomTests = {
@@ -1198,30 +1205,3 @@ router.post('/add-nonanal', async (req, res) => {
 module.createTodayDateId = createTodayDateId;
 module.exports = router;
 
-// for (const subject in UNITWEIGHTAGE) {
-//   if (UNITWEIGHTAGE.hasOwnProperty(subject)) {
-//     const subjectModel = getModelBasedOnSubject(subject);
-//     const unitWeightage = UNITWEIGHTAGE[subject];
-
-//     for (const mergedunit in unitWeightage) {
-//       if (unitWeightage.hasOwnProperty(mergedunit)) {
-//         const numberOfQuestions = unitWeightage[mergedunit];
-
-//         const randomQuestions = await subjectModel.aggregate([
-//           { $match: { mergedunit: mergedunit } },
-//           { $sample: { size: numberOfQuestions } },
-//         ]);
-//         finalquestions.push(...randomQuestions);
-//       }
-//     }
-//   }
-// }
-// const questionsArray = finalquestions.map((questionid) => {
-//   return {
-//     question: questionid.questionid,
-//   };
-// });
-// const dailytest = new DailyTest({
-//   dateid: dateid,
-//   questions: questionsArray,
-// });

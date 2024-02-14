@@ -151,13 +151,17 @@ router.get("/get-anal", VerifyUser, async (req, res) => {
     });
 
     // trimming the tests data for final shape
-    const attendedTests = userAnalytic.tests.map(test => ({
-      score: `${test.score.c}/${test.score.t}`,
-      name: test.test.name,
-      type: test.test.type,
-      _id: test.test._id,
-      timetaken: `${test.timetaken.t} (${test.timetaken.a} av)`
-    }));
+    let attendedTests = []
+    if (userAnalytic.tests.length > 0) {
+      console.log("🚀 ~ router.get ~ userAnalytic.tests:", userAnalytic.tests)
+      attendedTests = userAnalytic.tests.map(test => ({
+        score: `${test.score.c}/${test.score.t}`,
+        name: test.test.name,
+        type: test.test.type,
+        _id: test.test._id,
+        timetaken: `${test.timetaken.t} (${test.timetaken.a} av)`
+      }));
+    }
 
     // incorrect questions
     const incorrectQuestions = userAnalytic.incorrect || []
@@ -485,7 +489,6 @@ router.get('/get-organizations/', VerifyUser, async (req, res) => {
 router.get('/get-organization/:organizationid', VerifyUser, async (req, res) => {
   try {
     const { organizationid } = req.params;
-    console.log("🚀 ~ router.get ~ organizationid:", organizationid)
     if (!organizationid) return res.status(404).json({ message: 'your organization id is missing' });
 
     const organization = await Organization
@@ -507,8 +510,6 @@ router.get('/get-organization/:organizationid', VerifyUser, async (req, res) => 
         select: 'testid date usersattended name',
       })
       .exec();
-
-      console.log("🚀 ~ router.get ~ organization:", organization)
     if (!organization) {
       return res.status(404).json({ message: 'Organization not found' });
     }

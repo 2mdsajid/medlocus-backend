@@ -40,6 +40,17 @@ const analyticSchema = new mongoose.Schema({
         },
     }],
     chapterscores: [], //coz i cant append or modify an object containing the k, v pairs
+    // type of this field
+    /* 
+   chapterscores : [{
+        [key:string]: [
+            {
+                t: number
+                c: number
+            }
+        ]
+    }]
+    */
     incorrect: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Question'
@@ -48,3 +59,6 @@ const analyticSchema = new mongoose.Schema({
 
 const Analytic = mongoose.model("Analytic", analyticSchema);
 module.exports = Analytic;
+
+
+

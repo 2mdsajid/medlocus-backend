@@ -1,13 +1,6 @@
 const express = require("express");
 const router = express.Router();
 
-const {
-  MECSYLLABUS,
-  UNITWEIGHTAGE,
-  SUBJECTWEIGHTAGE,
-  UPDATED_SYLLABUS,
-} = require("../public/syllabus.js");
-
 const DailyTest = require("../schema/dailytest");
 const Question = require("../schema/question");
 const Admin = require("../schema/admin");
@@ -17,8 +10,9 @@ const Analytic = require("../schema/analytic");
 const CustomTest = require("../schema/customtests");
 
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
+const { getAllChaptersArray, getChaptersBySubject } = require("../public/new-syllabus");
 
-router.get("/analytics", async (req, res) => {
+router.get("/analytics", VerifyAdmin, async (req, res) => {
   try {
     const totalQuestions = await Question.countDocuments();
 
@@ -145,7 +139,6 @@ router.post('/update-test', VerifyUser, async (req, res) => {
     const userId = req.userId;
 
     let analytic = await Analytic.findOne({ userid: userId });
-
     if (!analytic) {
       analytic = new Analytic({ userid: userId, chapterscores: [{}] });
       const user = await User.findOne({ _id: userId });
@@ -223,7 +216,7 @@ router.post('/add-to-leaderboard', async (req, res) => {
 })
 
 // get users for anaytics
-router.get("/get-stats", async (req, res) => {
+router.get("/get-stats", VerifyAdmin, async (req, res) => {
   try {
     const targetUsersForThisSession = 669
     const Users = await User.find()
@@ -284,6 +277,141 @@ router.get("/get-stats", async (req, res) => {
     return res.status(500).json({ message: 'Internal Server Error' });
   }
 })
+
+// get leader board to display in homepage
+router.get("/get-home-stats", async (req, res) => {
+  try {
+    const analytics = await Analytic.find().populate('userid', 'name image');
+
+    // Check if there are any analytics
+    if (analytics.length === 0) {
+      return res.status(404).json({ message: 'No data found in the Analytic collection' });
+    }
+
+    // Step 2: Calculate total t and total c for each chapterscores[0]
+    const allTimeLeaderboardData = analytics.map(analytic => {
+      const chapterscores = analytic.chapterscores[0];
+
+      const totalCorrect = Object.values(chapterscores).reduce((sum, chapterData) => {
+        return sum + chapterData.reduce((chapterSum, entry) => chapterSum + entry.c, 0);
+      }, 0);
+
+      const totalTotal = Object.values(chapterscores).reduce((sum, chapterData) => {
+        return sum + chapterData.reduce((chapterSum, entry) => chapterSum + entry.t, 0);
+      }, 0);
+
+      const score = ((totalCorrect / totalTotal) * 100).toFixed(2);
+
+      return {
+        name: (analytic.userid && analytic.userid.name) ? analytic.userid.name : 'unknown',
+        image: analytic.userid.image,
+        correct: totalCorrect,
+        total: totalTotal,
+        score: isNaN(score) ? 0 : score, // To handle division by zero scenarios
+      };
+    });
+
+    // Sort the array based on the score in descending order
+    const sortedLeaderboardData = allTimeLeaderboardData.sort((a, b) => b.score - a.score);
+
+    return res.status(200).json(sortedLeaderboardData);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// get total tests attempted board
+router.get("/get-totaltests-leaderboard", async (req, res) => {
+  try {
+    const analytics = await Analytic.find().populate('userid', ['name', 'image']);
+
+    // Check if there are any analytics
+    if (analytics.length === 0) {
+      return res.status(404).json({ message: 'No data found in the Analytic collection' });
+    }
+
+    // Calculate total tests attempted by each user
+    const totalTestsLeaderboardData = analytics.map(analytic => {
+      const totalTests = analytic.chapterscores.reduce((total, chapter) => {
+        return total + Object.keys(chapter).length;
+      }, 0);
+
+      return {
+        name: (analytic.userid && analytic.userid.name) ? analytic.userid.name : 'unknown',
+        image: (analytic.userid && analytic.userid.image) ? analytic.userid.image : 'default-image-url',
+        tests: totalTests,
+      };
+    });
+
+    // Sort the array based on the total tests in descending order
+    const sortedTotalTestsLeaderboardData = totalTestsLeaderboardData.sort((a, b) => b.tests - a.tests);
+
+    return res.status(200).json(sortedTotalTestsLeaderboardData);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// get chapters recommendations for home page
+router.get('/chapters-recommendations',VerifyUser, async function (req, res) {
+  const userid = req.userId;
+  const allChaptersBySubject = getChaptersBySubject()
+
+  try {
+    const userAnalytics = await Analytic.findOne({ userid: userid });
+    if (!userAnalytics) {
+      const subjectForChapter = allChaptersBySubject
+      const finalRecommendations = {};
+      for (const subject in allChaptersBySubject) {
+        finalRecommendations[subject] = subjectForChapter[subject].slice(0, 1);
+      }
+      return res.status(404).json(finalRecommendations)
+    }
+
+    const firstChapterscore = userAnalytics.chapterscores[0];
+    const attemptedChapters = Object.keys(firstChapterscore);
+    const allChapters = await Question.distinct('chapter');
+    const unAttemptedChapters = allChapters.filter(chapter => !attemptedChapters.includes(chapter));
+
+    const subjectForChapter = {};
+    /* 
+    subject : [
+      'chapter1', 'chapter2', 'chapter3
+    ]
+    */
+    for (const subject in allChaptersBySubject) {
+      const allChaptersOfThisSubject = allChaptersBySubject[subject];
+      const subjectChapters = [];
+
+      unAttemptedChapters.forEach((chapter) => {
+        if (allChaptersOfThisSubject.includes(chapter)) {
+          subjectChapters.push(chapter);
+        }
+      });
+
+      if (subjectChapters.length > 0) {
+        subjectForChapter[subject] = subjectChapters;
+      }
+    }
+
+    // Get at least 3 chapters for each subject
+    const finalRecommendations = {};
+    for (const subject in subjectForChapter) {
+      finalRecommendations[subject] = subjectForChapter[subject].slice(0, 1);
+    }
+    return res.json(finalRecommendations);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+
+
+
 
 
 module.exports = router;
