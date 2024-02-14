@@ -98,7 +98,7 @@ const VerifyUser = async (req, res, next) => {
     const user = await User.findById(userFromAuth._id).select('_id name email image role key questions discussions payment')
     if (!user) return res.status(403).json({ message: "Invalid Authentication 2" });
 
-    req.userId = user._id;
+    req.userId = String(user._id);
     req.role = user.role;
     req.user = user
     next();

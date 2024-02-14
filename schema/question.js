@@ -124,6 +124,7 @@ const questionSchema = new mongoose.Schema({
   },
 });
 
+questionSchema.index({ chapter: 1 });
 const Question = mongoose.model("Question", questionSchema);
 
 module.exports = Question;
