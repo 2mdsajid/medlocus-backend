@@ -312,7 +312,6 @@ router.post("/update-user", VerifyAdmin, async (req, res) => {
 });
 
 
-
 // for non logged users
 router.post("/add-nonuser", async (req, res) => {
   try {
@@ -378,7 +377,7 @@ router.post('/complete-registration/:id', async (req, res) => {
 // create an organization
 router.post('/create-organization', VerifyUser, async (req, res) => {
   try {
-    const { name, uniqueId } = req.body;
+    const { name, uniqueId, image } = req.body;
     const createdBy = req.userId
     if (!name || !uniqueId) {
       return res.status(400).json({ message: 'Missing parameters' });
@@ -394,7 +393,7 @@ router.post('/create-organization', VerifyUser, async (req, res) => {
       createdBy,
       name,
       uniqueId,
-      image: '',
+      image: image || '',
       moderators: [createdBy],
       users: [createdBy],
     });

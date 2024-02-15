@@ -305,7 +305,7 @@ router.get(
           .populate({
             path: 'questionsIds',
             model: questionmodel,
-            select: '_id question options answer explanation subject chapter mergedunit',
+            select: '_id question options images answer explanation subject chapter mergedunit',
           })
           .exec();
         const questions = test2.questionsIds
@@ -669,8 +669,10 @@ router.post('/create-test', VerifyUser, async (req, res) => {
     const username = req.user.name
 
     let organization;
+    let image = ''
     if (isOrg && isOrg.state === true) {
       organization = await Organization.findById(isOrg.by)
+      image = organization.image
       if (!organization) return res.status(400).json({ message: "Oops organization does not exist." });
     }
 
@@ -708,6 +710,7 @@ router.post('/create-test', VerifyUser, async (req, res) => {
       type: type,
       name: name,
       testid: testid,
+      image: image || '',
       createdBy: userid,
       questionsIds: question_ids,
       questionmodel: questiontype === 'withid' ? 'Question' : 'Outquestion',
@@ -829,7 +832,6 @@ router.get('/get-custom-tests/:type/:testid', async (req, res) => {
     if (!customTest) {
       return res.status(300).json({ message: 'No test available' })
     }
-
     // CHECKING FOR ACCESS TO TESTS FOR USERS
     let isAllowed = true
     const isLocked = customTest.isLocked
@@ -850,7 +852,6 @@ router.get('/get-custom-tests/:type/:testid', async (req, res) => {
     if (isAllowed) {
       customTest.usersconnected.push(userid)
       const saved = await customTest.save()
-      console.log("🚀 ~ router.get ~ saved:", saved)
     }
 
     const modifiedCustomTests = {
