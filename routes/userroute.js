@@ -153,7 +153,6 @@ router.get("/get-anal", VerifyUser, async (req, res) => {
     // trimming the tests data for final shape
     let attendedTests = []
     if (userAnalytic.tests.length > 0) {
-      console.log("🚀 ~ router.get ~ userAnalytic.tests:", userAnalytic.tests)
       attendedTests = userAnalytic.tests.map(test => ({
         score: `${test.score.c}/${test.score.t}`,
         name: test.test.name,
@@ -390,15 +389,22 @@ router.post('/create-organization', VerifyUser, async (req, res) => {
       return res.status(400).json({ message: 'Organization with this uniqueId already exists' });
     }
 
+    // make sure to migrate old data for this
     const newOrganization = new Organization({
       createdBy,
       name,
       uniqueId,
       image: '',
       moderators: [createdBy],
+      users: [createdBy],
     });
 
+
+    const user = await User.findById(createdBy)
+    user.organizations.push(newOrganization._id);
+    await user.save()
     await newOrganization.save();
+
     return res.status(201).json({ organizationId: newOrganization._id });
 
   } catch (error) {
@@ -427,15 +433,16 @@ router.get('/join-org/:orgid', VerifyUser, async (req, res) => {
     organization[keyType].push(userid);
     await organization.save();
 
+    const user = await User.findById(userid)
+    user.organizations.push(orgId);
+
     if (organization.state === 'premium') {
-      const user = await User.findById(userid)
-      user.organizations.push(orgId);
       user.payment = {
         isPaid: true,
         method: 'organization'
       }
-      await user.save();
     }
+    await user.save();
 
     return res.status(200).json({
       message: `successfully joined ${organization.name} as ${keyType}.`
@@ -451,22 +458,25 @@ router.get('/join-org/:orgid', VerifyUser, async (req, res) => {
 router.get('/get-organizations/', VerifyUser, async (req, res) => {
   try {
     const userid = req.userId;
-
-    const organizations = await Organization
-      .find({ createdBy: userid })
-      .populate({
-        path: 'createdBy',
-        select: 'name',
-      });
+    const organizations = await Organization.find({
+      $or: [
+        { moderators: userid },
+        { users: userid },
+      ],
+    }).populate({
+      path: 'createdBy',
+      select: '_id name',
+    })
 
     if (!organizations || organizations.length === 0) {
-      return res.status(404).json({ message: 'Organizations not found' });
+      const organizationsFiltered = []
+      return res.status(404).json(organizationsFiltered);
     }
 
-    const cleanedOrganizations = organizations.map(org => ({
+    const organizationsFiltered = organizations.map(org => ({
       name: org.name,
       uniqueId: org.uniqueId,
-      createdBy: org.createdBy.name,
+      createdBy: org.createdBy,
       usersCount: org.users.length,
       testsCount: org.tests.length,
       moderatorsCount: org.moderators.length,
@@ -477,7 +487,7 @@ router.get('/get-organizations/', VerifyUser, async (req, res) => {
       _id: org._id,
       date: org.date
     }));
-    res.status(200).json(cleanedOrganizations);
+    res.status(200).json(organizationsFiltered);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Internal Server Error' });

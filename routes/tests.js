@@ -90,10 +90,6 @@ router.get(
         }
 
         if (typeoftest === "chapterwise") {
-          // make sure to revise the chapter
-          // chapter coming with ( ) replaced by (-)
-          // syllabus has ( ) & database has (-)
-          // so matching from the syllabus removing the (-) with ( )
           if (!chap) {
             return res.status(400).json({
               message: "Invalid or missing chapter",
@@ -321,6 +317,39 @@ router.get(
     }
   }
 );
+
+// get questions for re-attempt --- only for custom tests
+router.get('/re-attempt-questions/:testhexid', VerifyUser, async (req, res) => {
+  try {
+    const { testhexid } = req.params;
+
+    // checking for testid -- incase
+    if (!testhexid) {
+      return res.status(400).json({
+        message: "Can't find testid",
+      });
+    }
+
+    const test = await CustomTest.findById(testhexid);
+    if (!test) {
+      return res.status(404).json({ message: "Test not foundd" });
+    }
+
+    const questionmodel = test.questionmodel;
+    const test2 = await CustomTest.findById(testhexid)
+      .populate({
+        path: 'questionsIds',
+        model: questionmodel,
+        select: '_id question options answer explanation subject chapter mergedunit',
+      })
+      .exec();
+    const questions = test2.questionsIds
+    return res.status(200).json({ questions });
+
+  } catch (error) {
+    return res.status(400).json({ message: 'Internal Server Error' });
+  }
+})
 
 // create daily and weekly tests -- for cron jobs
 router.get("/createdailytest", async (req, res) => {
@@ -788,7 +817,7 @@ router.get('/get-custom-tests/:type/:testid', async (req, res) => {
       .populate({
         path: "createdBy",
         select: "_id name email image",
-        options: {lean: true},
+        options: { lean: true },
       })
       .populate({
         path: "isOrg.by",
