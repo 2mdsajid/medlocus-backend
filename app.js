@@ -49,7 +49,7 @@ app.use(require('./routes/analytics'))
 app.use(require('./routes/paymentroute'))
 // app.use(require('./routes/htmxtut'))
 app.use(require('./routes/addfile'))
-app.use(require('./routes/labroute'))
+// app.use(require('./routes/labroute'))
 app.use(require('./routes/gmailroute'))
 
 const server = http.createServer(app);
