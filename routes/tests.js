@@ -747,19 +747,32 @@ router.post('/create-test', VerifyUser, async (req, res) => {
 })
 
 
-
-router.get("/get-custom-tests", VerifyUser, async (req, res) => {
+// for result page --- 
+router.get("/get-custom-tests", async (req, res) => {
   try {
     const tests = await CustomTest.find({
       usersattended: { $exists: true, $not: { $size: 0 } },
-    }).select("_id testid date type");
+    }).select("_id testid date type").lean()
 
     if (!tests || tests.length === 0) {
       return res.status(200).json({
         message: "No tests found with attendees",
       });
     }
-    return res.status(200).json(tests)
+    const groupedData = tests.reduce((acc, obj) => {
+      const { type, ...rest } = obj; 
+      acc[type] = acc[type] || []; 
+      acc[type].push(rest);
+      return acc;
+    }, {});
+
+    const filteredData = Object.entries(groupedData).reduce((acc, [type, tests]) => {
+      const latestThree = tests.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3);
+      acc[type] = latestThree;
+      return acc;
+    }, {});
+    
+    return res.status(200).json(filteredData)
 
   } catch (error) {
     return res.status(400).json({
