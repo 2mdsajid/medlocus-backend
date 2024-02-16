@@ -305,16 +305,17 @@ router.get("/get-home-stats", async (req, res) => {
       return {
         name: (analytic.userid && analytic.userid.name) ? analytic.userid.name : 'unknown',
         image: analytic.userid.image,
-        correct: totalCorrect,
-        total: totalTotal,
+        // correct: totalCorrect,
+        // total: totalTotal,
         score: isNaN(score) ? 0 : score, // To handle division by zero scenarios
       };
     });
 
     // Sort the array based on the score in descending order
     const sortedLeaderboardData = allTimeLeaderboardData.sort((a, b) => b.score - a.score);
+    const top3LeaderboardData = sortedLeaderboardData.slice(0, 3);
 
-    return res.status(200).json(sortedLeaderboardData);
+    return res.status(200).json(top3LeaderboardData);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Internal Server Error' });
@@ -346,8 +347,9 @@ router.get("/get-totaltests-leaderboard", async (req, res) => {
 
     // Sort the array based on the total tests in descending order
     const sortedTotalTestsLeaderboardData = totalTestsLeaderboardData.sort((a, b) => b.tests - a.tests);
+    const top3LeaderboardData = sortedTotalTestsLeaderboardData.slice(0, 3);
 
-    return res.status(200).json(sortedTotalTestsLeaderboardData);
+    return res.status(200).json(top3LeaderboardData);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Internal Server Error' });
@@ -407,11 +409,6 @@ router.get('/chapters-recommendations',VerifyUser, async function (req, res) {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
-
-
-
-
 
 
 module.exports = router;

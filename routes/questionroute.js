@@ -6,7 +6,8 @@ const Admin = require("../schema/admin");
 const User = require("../schema/user");
 
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
-const { newquestionlimiter, importquestionlimiter, limitermiddleware } = require("../middlewares/limiter");
+const { newquestionlimiter, importquestionlimiter, limitermiddleware, testing_role_based_limmitter } = require("../middlewares/limiter");
+const { encryptData } = require("../public/utils");
 
 
 function cosineSimilarity(sentence1, sentence2) {
@@ -53,6 +54,7 @@ router.post(
         difficulty,
         images,
       } = req.body.questionElement;
+
       const state = ['admin', 'moderator', 'sajid', 'superadmin'].includes(req.role) ? true : false
       const newQuestion = new Question({
         question,
@@ -458,7 +460,7 @@ router.get("/get-question/:id", VerifyUser, async (req, res) => {
 
 
 // UNDER BETA routes
-router.get('/importquestions', VerifyAdmin, importquestionlimiter, async (req, res) => {
+router.get('/importquestions', VerifyUser, importquestionlimiter, async (req, res) => {
   const { sub, chap, unit, iyq } = req.query;
   const uuid = req.user.uuid
   let questions
@@ -466,8 +468,6 @@ router.get('/importquestions', VerifyAdmin, importquestionlimiter, async (req, r
     questions = await Question.aggregate([
       {
         $match: {
-          subject: sub,
-          mergedunit: unit,
           chapter: chap,
           "isverified.state": true,
           "isadded.state": true,
@@ -491,14 +491,11 @@ router.get('/importquestions', VerifyAdmin, importquestionlimiter, async (req, r
     questions = await Question.aggregate([
       {
         $match: {
-          subject: sub,
-          mergedunit: unit,
           chapter: chap,
           "isverified.state": true,
           "isadded.state": true,
           "isreported.state": false,
           "isflagged.state": false,
-
         },
       },
       {
@@ -519,11 +516,18 @@ router.get('/importquestions', VerifyAdmin, importquestionlimiter, async (req, r
       message: "No questions found",
     });
   }
+
+  const encrptedQuestions = encryptData(JSON.stringify(questions))
   return res.status(200).json({
     message: "Imported questions. click to add them.",
-    questions,
+    encrptedQuestions,
   });
+})
 
+router.get('/testing-limiter', VerifyAdmin, testing_role_based_limmitter, async (req, res) => {
+  res.status(200).json({
+    message: 'limit not reached'
+  });
 })
 
 //  DEPRECATED route

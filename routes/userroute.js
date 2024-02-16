@@ -311,7 +311,6 @@ router.post("/update-user", VerifyAdmin, async (req, res) => {
   }
 });
 
-
 // for non logged users
 router.post("/add-nonuser", async (req, res) => {
   try {
@@ -335,44 +334,6 @@ router.post("/add-nonuser", async (req, res) => {
   }
 });
 
-//EXPERIMENTAL STUFFS
-router.post('/complete-registration/:id', async (req, res) => {
-  try {
-    const { institution, accessToken } = req.body;
-    const userId = req.params.id;
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    user.institution = institution
-    user.isCompleted = true;
-    await user.save();
-
-    const anal = new Analytic({ userid: userId })
-    await anal.save();
-
-    if (accessToken) {
-      const [orgId, userKey] = accessToken.split('-');
-      const organization = await Organization.findById(orgId);
-      if (!organization) return res.status(404).json({ message: 'Organization not found.' });
-
-      const keyType = organization.keys.moderator === userKey ? 'moderators' : organization.keys.user === userKey ? 'users' : null;
-      if (!keyType) return res.status(400).json({ message: 'Invalid key.' });
-      if (organization[keyType].includes(userId)) return res.status(400).json({ message: 'User already exists in the organization.' });
-
-      organization[keyType].push(userId);
-      await organization.save();
-
-      user.tokensUsed.push(accessToken)
-      await user.save();
-    }
-
-    res.status(200).json({ message: 'Registration completed successfully' });
-
-  } catch (error) {
-    console.error("Error fetching user:", error);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-});
 
 // create an organization
 router.post('/create-organization', VerifyUser, async (req, res) => {
@@ -435,11 +396,10 @@ router.get('/join-org/:orgid', VerifyUser, async (req, res) => {
     const user = await User.findById(userid)
     user.organizations.push(orgId);
 
-    if (organization.state === 'premium') {
-      user.payment = {
-        isPaid: true,
-        method: 'organization'
-      }
+    const currentDateTime = new Date();
+    const paymentExpireDateTime = new Date(organization.payment.expireAt);
+    if (organization.state === 'premium' && (currentDateTime < paymentExpireDateTime)) {
+      user.payment = organization.payment
     }
     await user.save();
 
@@ -611,6 +571,46 @@ router.post('/send-request', VerifyUser, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+});
+
+
+//EXPERIMENTAL STUFFS
+router.post('/complete-registration/:id', async (req, res) => {
+  try {
+    const { institution, accessToken } = req.body;
+    const userId = req.params.id;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.institution = institution
+    user.isCompleted = true;
+    await user.save();
+
+    const anal = new Analytic({ userid: userId })
+    await anal.save();
+
+    if (accessToken) {
+      const [orgId, userKey] = accessToken.split('-');
+      const organization = await Organization.findById(orgId);
+      if (!organization) return res.status(404).json({ message: 'Organization not found.' });
+
+      const keyType = organization.keys.moderator === userKey ? 'moderators' : organization.keys.user === userKey ? 'users' : null;
+      if (!keyType) return res.status(400).json({ message: 'Invalid key.' });
+      if (organization[keyType].includes(userId)) return res.status(400).json({ message: 'User already exists in the organization.' });
+
+      organization[keyType].push(userId);
+      await organization.save();
+
+      user.tokensUsed.push(accessToken)
+      await user.save();
+    }
+
+    res.status(200).json({ message: 'Registration completed successfully' });
+
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
