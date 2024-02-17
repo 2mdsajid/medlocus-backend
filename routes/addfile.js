@@ -9,6 +9,7 @@ const PastQuestion = require("../schema/pastquestion");
 const Admin = require("../schema/admin");
 const { VerifyUser, VerifyAdmin } = require("../middlewares/middlewares");
 const CustomTest = require("../schema/customtests");
+const Organization = require("../schema/organization");
 
 const stopWords = [
   "a",
@@ -348,7 +349,7 @@ router.post("/add-past-questions", VerifyAdmin, async (req, res) => {
     const jsonData = JSON.parse(req.body.jsondata);
     const yr = req.body.year;
     const af = req.body.affiliation;
-    const addedby = req.user._id;
+    const addedby = req.userId;
     if (!yr || !af) {
       return res.status(300).json({ message: 'you are missing to provide year or affiliation' });
     }
@@ -356,7 +357,7 @@ router.post("/add-past-questions", VerifyAdmin, async (req, res) => {
     const incompatibleQuestions = await jsonData.filter(
       (question) => !checkCompatibility(question)
     );
-    
+
     if (incompatibleQuestions.length > 0) {
       return res.status(400).json({
         message: `${incompatibleQuestions.length} Incompatible questions found. Please refer the docs fro compatibility`,
@@ -369,7 +370,7 @@ router.post("/add-past-questions", VerifyAdmin, async (req, res) => {
         message: `This set '${af}-${yr}' already exists in past year sets.`,
       });
     }
-    
+
     const assignedYearAffiliationQuestions = await assignYearAndAffiliation(jsonData, yr, af, addedby);
     const newQuestions = await PastQuestion.insertMany(assignedYearAffiliationQuestions);
 
@@ -377,7 +378,7 @@ router.post("/add-past-questions", VerifyAdmin, async (req, res) => {
     const questionIds = newQuestions.map(question => question._id);
     const newCustomTest = new CustomTest({
       type: "pastpapers",
-      name : `${af}-${yr}`,
+      name: `${af}-${yr}`,
       testid: `${af}-${yr}`,
       createdBy: addedby,
       questionmodel: "Pastquestion",
@@ -386,7 +387,7 @@ router.post("/add-past-questions", VerifyAdmin, async (req, res) => {
 
     await newCustomTest.save();
     // update admin for adding questions
-    const admin = await Admin.findOne({ _id: addedby });
+    const admin = await Admin.findById(addedby);
     admin.questions = admin.questions + assignedYearAffiliationQuestions.length;
     await admin.save();
 
@@ -442,6 +443,61 @@ router.post(
     }
   }
 );
+
+
+// add prayash left tests in custom tetss
+router.post("/add-prayash-questions", VerifyAdmin, async (req, res) => {
+  try {
+    const jsonData = req.body.jsondata
+    const testName = req.body.name
+    const testid = testName.replace(/\s+/g, '-');
+    const addedby = req.userId;
+
+    if (!testName || !jsonData.length > 0) {
+      return res.status(300).json({ message: 'Name or questions missing' });
+    }
+
+    const orgId = '65c4876c6797ad256fa3f5f9'
+    const organization = await Organization.findById(orgId)
+    const image = organization.image
+    const type = organization.uniqueId
+
+
+    const existingTest = await CustomTest.findOne({ type, testid });
+    if (existingTest) {
+      return res.status(400).json({
+        message: `This test already exists in!`,
+      });
+    }
+
+    const newQuestions = await Question.insertMany(jsonData);
+
+    // creating the test for past questions
+    const questionIds = newQuestions.map(question => question._id);
+    const newCustomTest = new CustomTest({
+      type,
+      name: testName,
+      testid: testid,
+      createdBy: addedby,
+      image: image || '',
+      questionmodel: "Question",
+      questionsIds: questionIds,
+    });
+    await newCustomTest.save();
+    // update admin for adding questions
+    const admin = await Admin.findOne({ _id: addedby });
+    admin.questions = admin.questions + jsonData.length;
+    await admin.save();
+
+    return res.status(200).json({
+      message: `${jsonData.length} questions - By ${req.user.name} --  added.`,
+    });
+
+  } catch (error) {
+    console.error("Error ", error);
+    return res.status(500).json({ message: error.message });
+  }
+});
 
 module.checkCompatibility = checkCompatibility
 module.exports = router;

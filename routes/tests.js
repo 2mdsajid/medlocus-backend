@@ -872,8 +872,8 @@ router.get('/get-custom-tests/:type/:testid', async (req, res) => {
       testid: customTest.testid,
       image: customTest.image,
       createdBy: {
-        email: customTest.createdBy.email,
-        name: customTest.createdBy.name,
+        email: customTest.createdBy ? customTest.createdBy.email : '',
+        name: customTest.createdBy ? customTest.createdBy.name : '',
       },
       numberOfQuestions: customTest.questionsIds.length,
       type: customTest.type,
