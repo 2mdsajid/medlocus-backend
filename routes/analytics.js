@@ -135,7 +135,7 @@ router.get("/analytics", VerifyAdmin, async (req, res) => {
 
 router.post('/update-test', VerifyUser, async (req, res) => {
   try {
-    const { typeoftest, testid, chapter_scores, combined_score, incorrectAttempt, score_card } = req.body;
+    const { typeoftest, testid, chapter_scores, combined_score, incorrectAttempt, score_card, questions_ids_and_scores } = req.body;
     const userId = req.userId;
 
     let analytic = await Analytic.findOne({ userid: userId });
@@ -159,6 +159,7 @@ router.post('/update-test', VerifyUser, async (req, res) => {
     analytic.chapterscores[0] = old_scores[0]
 
     // storing custom test
+    let questionModel = 'Question'
     const existingTest = await CustomTest.findOne({
       typeoftest,
       testid
@@ -173,10 +174,22 @@ router.post('/update-test', VerifyUser, async (req, res) => {
       // storing incorrect questions ids
       const newIncorrectAttempts = incorrectAttempt.filter(id => !analytic.incorrect.includes(id));
       analytic.incorrect.push(...newIncorrectAttempts);
+
+      // saving custom tests for re-attempts
       if (existingTest) {
         analytic.tests.push({
           test: existingTest._id,
           ...combined_score,
+        })
+      }
+
+      // saving last 7 days tests -- not for past papers || fro now
+      if (!existingTest || existingTest.type !== 'pastpapers') {
+        questionModel = existingTest ? existingTest.questionmodel : 'Question'
+        analytic.weektests.push({
+          name: testid || typeoftest,
+          questionsModel: questionModel,
+          questions: questions_ids_and_scores,
         })
       }
     }
@@ -357,7 +370,7 @@ router.get("/get-totaltests-leaderboard", async (req, res) => {
 });
 
 // get chapters recommendations for home page
-router.get('/chapters-recommendations',VerifyUser, async function (req, res) {
+router.get('/chapters-recommendations', VerifyUser, async function (req, res) {
   const userid = req.userId;
   const allChaptersBySubject = getChaptersBySubject()
 

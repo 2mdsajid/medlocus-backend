@@ -165,6 +165,17 @@ router.get("/get-anal", VerifyUser, async (req, res) => {
     // incorrect questions
     const incorrectQuestions = userAnalytic.incorrect || []
 
+    // past 7 days tests
+    const pastSevenDaysTests = []
+    for (const test of userAnalytic.weektests) {
+      pastSevenDaysTests.push({
+        _id: test._id,
+        name: test.name,
+        date: test.createdAt,
+        questionsLength: test.questions.length
+      })
+    }
+
 
     // const user = await User.findOne({ _id: userId })
     //   .populate({
@@ -175,16 +186,68 @@ router.get("/get-anal", VerifyUser, async (req, res) => {
     //   .exec()
     // const questionsReported = user.questions
 
+
     let testsCreated = await CustomTest.find({
       createdBy: userId
     }).select('_id name testid type date') || []
-
 
     return res.status(200).json({
       chapterScores: totalChapterScores,
       testsCreated,
       attendedTests,
-      incorrectQuestions
+      incorrectQuestions,
+      pastSevenDaysTests
+    });
+
+  } catch (error) {
+    console.error("Error :", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// get single test quesitons and details from past seven days
+// user to fetch in query param
+// for admin, non admin, moderators all
+router.get("/get-past-anal/:analId", VerifyUser, async (req, res) => {
+  try {
+    const userId = req.query.userId;
+    const analId = req.params.analId;
+    if (!analId) return res.status(404).json({ message: "Not FOund" });
+
+    const userAnalytic = await Analytic.findOne({ userid: userId })
+      .populate({
+        path: 'weektests.questions.qn',
+        select: 'question chapter subject options answer explanation'
+      })
+      .exec()
+    if (!userAnalytic) return res.status(404).json({ message: "User not found" });
+
+    const currentAnal = userAnalytic.weektests.find(test => String(test._id) === analId);
+    // past 7 days tests
+    let modifiedQuestions = []
+    for (const questionData of currentAnal.questions) {
+      const extractedQuestion = {
+        question: questionData.qn.question,
+        answer: questionData.qn.answer,
+        options: questionData.qn.options,
+        explanation: questionData.qn.explanation,
+        subject: questionData.qn.subject,
+        chapter: questionData.qn.chapter,
+        mergedunit: questionData.qn.mergedunit || null,
+        uans: questionData.uans,
+        timetaken: questionData.t
+      };
+      modifiedQuestions.push(extractedQuestion);
+    }
+
+    currentAnal.questions = modifiedQuestions;
+    modifiedWeekAnal = {
+      name: currentAnal.name,
+      questions: modifiedQuestions,
+      date: currentAnal.createdAt
+    }
+    return res.status(200).json({
+      ...modifiedWeekAnal
     });
 
   } catch (error) {
@@ -263,11 +326,23 @@ router.get("/get-anal/:userid", VerifyUser, async (req, res) => {
       payment: user.payment
     }
 
+    // past 7 days tests
+    const pastSevenDaysTests = []
+    for (const test of userAnalytic.weektests) {
+      pastSevenDaysTests.push({
+        _id: test._id,
+        name: test.name,
+        date: test.createdAt,
+        questionsLength: test.questions.length
+      })
+    }
+
     return res.status(200).json({
       chapterScores: totalChapterScores,
       attendedTests,
       incorrectQuestions,
-      userProfile
+      userProfile,
+      pastSevenDaysTests
     });
 
   } catch (error) {

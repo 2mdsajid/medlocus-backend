@@ -54,6 +54,28 @@ const analyticSchema = new mongoose.Schema({
     incorrect: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Question'
+    }],
+    weektests: [{
+        name: String,
+        questions: [{
+            qn: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Question'
+            },
+            uans: {
+                type: String,
+                default: '',
+            },
+            t: {
+                type: Number,
+                default: 0,
+            }
+        }],
+        createdAt: {
+            type: Date,
+            default: Date.now,
+            expires: 7 * 24 * 60 * 60
+        }
     }]
 });
 

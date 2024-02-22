@@ -690,14 +690,17 @@ router.post('/create-test', VerifyUser, async (req, res) => {
           ...questionsForSubject.map(question => ({
             ...question,
             _id: new mongoose.Types.ObjectId(),
-            subject: subject.toLowerCase() // Assuming subject is the name in lowercase
+            subject: subject.toLowerCase(), // Assuming subject is the name in lowercase
+            isadded: {
+              by: userid,
+            }
           }))
         );
       }
 
       const questionIds = await Promise.all(
         flattenedQuestions.map(async (question) => {
-          const newQuestion = new Outquestion(question);
+          const newQuestion = new Question(question);
           await newQuestion.save();
           return newQuestion._id;
         })
@@ -713,7 +716,7 @@ router.post('/create-test', VerifyUser, async (req, res) => {
       image: image || '',
       createdBy: userid,
       questionsIds: question_ids,
-      questionmodel: questiontype === 'withid' ? 'Question' : 'Outquestion',
+      questionmodel: 'Question',
       isOrg: isOrg ? isOrg : { state: false },
     });
 
@@ -746,7 +749,6 @@ router.post('/create-test', VerifyUser, async (req, res) => {
   }
 })
 
-
 // for result page --- 
 router.get("/get-custom-tests", async (req, res) => {
   try {
@@ -760,8 +762,8 @@ router.get("/get-custom-tests", async (req, res) => {
       });
     }
     const groupedData = tests.reduce((acc, obj) => {
-      const { type, ...rest } = obj; 
-      acc[type] = acc[type] || []; 
+      const { type, ...rest } = obj;
+      acc[type] = acc[type] || [];
       acc[type].push(rest);
       return acc;
     }, {});
@@ -771,7 +773,7 @@ router.get("/get-custom-tests", async (req, res) => {
       acc[type] = latestThree;
       return acc;
     }, {});
-    
+
     return res.status(200).json(filteredData)
 
   } catch (error) {
@@ -949,7 +951,7 @@ router.get('/get-chapters', async (req, res) => {
 });
 
 
-// get chapters and it number of questions
+// get subjects and it number of questions
 router.get('/get-subjects', async (req, res) => {
   try {
     const subjectsWithCount = await Question.aggregate([
@@ -980,85 +982,6 @@ router.get('/get-mergedunits', async (req, res) => {
     console.error('Error retrieving merged units:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
-});
-
-// 
-
-router.post("/addusertotest", async (req, res) => {
-  const { typeoftest } = req.query;
-  let testid = req.query.testid;
-  // if (typeoftest === 'dailytest') {
-  //   testid = createTodayDateId();
-  // }
-
-  if (!testid) {
-    return res.status(400).json({
-      message: "undefined testid",
-    });
-  }
-
-  const { userid, name, score, email } = req.body;
-  if (!userid) {
-    return res.status(400).json({
-      message: "no userid or name provided",
-    });
-  }
-
-  let test = await CustomTest.findOne({ testid: testid, type: typeoftest })
-  if (!test) {
-    return res.status(400).json({
-      message: "cant find test",
-    });
-  }
-
-  const userExists = test.usersattended.some((user) => user.userid === userid);
-  if (userExists) {
-    return res.status(400).json({
-      message: "Already attended the test",
-    });
-  }
-
-  test.usersattended.push({
-    userid,
-    name,
-    totalscore: score,
-  });
-  const savedest = await test.save();
-
-  const subject = "Test Score";
-  const html = `<div style="background-color: #F8FAFC; padding: 32px;max-width:40rem;margin"0 auto;">
-  <div style="background-color: #FFFFFF; border-radius: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 32px; text-align: center;">
-    <img src="${LOGO_URL}" alt="Your Logo" style="max-width: 150px; margin-bottom: 16px;">
-    <h2 style="font-size: 28px; font-weight: bold; margin: 0 0 16px;">User Details</h2>
-    <p style="font-size: 18px; margin-bottom: 16px;">Hello ${name},</p>
-    <p style="font-size: 18px; margin-bottom: 16px;">Here are the user details:</p>
-    <div style="background-color: #E0E0E0; padding: 12px; border-radius: 8px; margin: 16px 0;">
-      <p style="font-size: 16px; margin: 0;"><strong>User ID:</strong> ${userid}</p>
-    </div>
-    <div style="background-color: #E0E0E0; padding: 12px; border-radius: 8px; margin: 16px 0;">
-      <p style="font-size: 16px; margin: 0;"><strong>Name:</strong> ${decodeURI(
-    name
-  )}</p>
-    </div>
-    <div style="background-color: #E0E0E0; padding: 12px; border-radius: 8px; margin: 16px 0;">
-      <p style="font-size: 16px; margin: 0;"><strong>Score:</strong> ${score}</p>
-    </div>
-    <div style="background-color: #3498db; color: #fff; padding: 10px; border-radius: 8px; margin: 16px 0;">
-      <p style="font-size: 16px; margin: 0;">Test ID: ${testid}</p>
-    </div>
-    <a href="${process.env.FRONTEND
-    }/result" style="color: #3498db; text-decoration: none; font-size: 16px; margin: 16px 0; display: block;">View Leaderboard and Answers</a>
-    <p style="font-size: 18px; margin: 16px 0;">Thanks for attending the test. We encourage you to participate in other tests available in the Test section.</p>
-    <p style="font-size: 18px; margin: 16px 0;">If you encounter any problems, feel free to discuss them in the Discussion section. You can also seek help and guidance from the toppers of previous tests.</p>
-  </div>
-</div>
-
-`;
-  const send_email = await sendEmail(subject, email, html);
-  return res.status(200).json({
-    message: "saved user score",
-    savedest,
-  });
 });
 
 
@@ -1115,8 +1038,6 @@ router.get('/get-pastpapers-count', async (req, res) => {
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
-
-
 
 
 /* EXPERIMENTAL STUFFS */
@@ -1244,6 +1165,87 @@ router.post('/add-nonanal', async (req, res) => {
     });
   }
 })
+
+// DEPRECATED
+// 
+router.post("/addusertotest", async (req, res) => {
+  const { typeoftest } = req.query;
+  let testid = req.query.testid;
+  // if (typeoftest === 'dailytest') {
+  //   testid = createTodayDateId();
+  // }
+
+  if (!testid) {
+    return res.status(400).json({
+      message: "undefined testid",
+    });
+  }
+
+  const { userid, name, score, email } = req.body;
+  if (!userid) {
+    return res.status(400).json({
+      message: "no userid or name provided",
+    });
+  }
+
+  let test = await CustomTest.findOne({ testid: testid, type: typeoftest })
+  if (!test) {
+    return res.status(400).json({
+      message: "cant find test",
+    });
+  }
+
+  const userExists = test.usersattended.some((user) => user.userid === userid);
+  if (userExists) {
+    return res.status(400).json({
+      message: "Already attended the test",
+    });
+  }
+
+  test.usersattended.push({
+    userid,
+    name,
+    totalscore: score,
+  });
+  const savedest = await test.save();
+
+  const subject = "Test Score";
+  const html = `<div style="background-color: #F8FAFC; padding: 32px;max-width:40rem;margin"0 auto;">
+  <div style="background-color: #FFFFFF; border-radius: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 32px; text-align: center;">
+    <img src="${LOGO_URL}" alt="Your Logo" style="max-width: 150px; margin-bottom: 16px;">
+    <h2 style="font-size: 28px; font-weight: bold; margin: 0 0 16px;">User Details</h2>
+    <p style="font-size: 18px; margin-bottom: 16px;">Hello ${name},</p>
+    <p style="font-size: 18px; margin-bottom: 16px;">Here are the user details:</p>
+    <div style="background-color: #E0E0E0; padding: 12px; border-radius: 8px; margin: 16px 0;">
+      <p style="font-size: 16px; margin: 0;"><strong>User ID:</strong> ${userid}</p>
+    </div>
+    <div style="background-color: #E0E0E0; padding: 12px; border-radius: 8px; margin: 16px 0;">
+      <p style="font-size: 16px; margin: 0;"><strong>Name:</strong> ${decodeURI(
+    name
+  )}</p>
+    </div>
+    <div style="background-color: #E0E0E0; padding: 12px; border-radius: 8px; margin: 16px 0;">
+      <p style="font-size: 16px; margin: 0;"><strong>Score:</strong> ${score}</p>
+    </div>
+    <div style="background-color: #3498db; color: #fff; padding: 10px; border-radius: 8px; margin: 16px 0;">
+      <p style="font-size: 16px; margin: 0;">Test ID: ${testid}</p>
+    </div>
+    <a href="${process.env.FRONTEND
+    }/result" style="color: #3498db; text-decoration: none; font-size: 16px; margin: 16px 0; display: block;">View Leaderboard and Answers</a>
+    <p style="font-size: 18px; margin: 16px 0;">Thanks for attending the test. We encourage you to participate in other tests available in the Test section.</p>
+    <p style="font-size: 18px; margin: 16px 0;">If you encounter any problems, feel free to discuss them in the Discussion section. You can also seek help and guidance from the toppers of previous tests.</p>
+  </div>
+</div>
+
+`;
+  const send_email = await sendEmail(subject, email, html);
+  return res.status(200).json({
+    message: "saved user score",
+    savedest,
+  });
+});
+
+
 
 module.createTodayDateId = createTodayDateId;
 module.exports = router;
