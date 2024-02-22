@@ -16,6 +16,7 @@ const questionSchema = new mongoose.Schema({
   },
   answer: {
     type: String,
+    enum: ['a', 'b', 'c', 'd'],
     required: true,
   },
   explanation: {
@@ -32,15 +33,15 @@ const questionSchema = new mongoose.Schema({
   },
   subject: {
     type: String,
-    required: true,
+    default: 'unknown',
   },
   chapter: {
     type: String,
-    required: true,
+    default: 'unknown',
   },
   mergedunit: {
     type: String,
-    required: true,
+    default: 'unknown',
   },
   category: {
     type: String,
@@ -115,10 +116,6 @@ const questionSchema = new mongoose.Schema({
     default: 0, //to track admin added question verified or not
   },
   correctattempt: {
-    type: Number,
-    default: 0,
-  },
-  timetaken: {
     type: Number,
     default: 0,
   },
