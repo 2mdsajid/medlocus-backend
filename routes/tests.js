@@ -891,6 +891,39 @@ router.get('/get-custom-tests/:type/:testid', async (req, res) => {
   }
 });
 
+
+// meta data api fetching for custom tests
+router.get('/get-custom-tests-metadata/:type/:testid', async (req, res) => {
+  try {
+    const { type, testid } = req.params
+
+    const customTest = await CustomTest.findOne({ type, testid })
+      .populate({
+        path: "createdBy",
+        select: "name image",
+        options: { lean: true },
+      })
+      .select('image name createdBy')
+      .exec() //.lean() will return a plain object so can't save or modify the data in db
+
+    if (!customTest) {
+      return res.status(300).json({ message: 'No test available' })
+    }
+
+    const test = {
+      name: customTest.name,
+      testid: customTest.testid,
+      image: customTest.image,
+      creatorImage: customTest.createdBy ? customTest.createdBy.image : '',
+      creatorName: customTest.createdBy ? customTest.createdBy.name : '',
+    }
+    return res.status(200).json(test)
+
+  } catch (error) {
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 // for results
 router.get('/get-customtest/:id', async (req, res) => {
   try {
