@@ -39,7 +39,7 @@ router.get(
   limitermiddleware,
   async (req, res) => {
     try {
-      const { model, num, sub, chap, unit, userid } = req.query;
+      const { model, num, sub, chap, unit, userid, c: code } = req.query;
       const { typeoftest } = req.params;
       const numberofquestions = parseInt(num);
 
@@ -291,6 +291,24 @@ router.get(
           });
         }
 
+        // checking teest code
+        if (test.isLocked && test.isLocked.type === 'codes') {
+          if (!code || code === 'undefined' || !test.isLocked.codes.includes(code)) {
+            return res.status(400).json({
+              message: "Invalid Access Code",
+            });
+          }
+
+          if (test.isLocked.codesUsed.includes(code)) {
+            return res.status(400).json({
+              message: "Code already used",
+            });
+          }
+          test.isLocked.codesUsed.push(code);
+          await test.save()
+
+        }
+
         // checking if user has already attended the test
         const userExists = test.usersattended.some((user) => user.userid === userid);
         if (userExists) {
@@ -298,6 +316,8 @@ router.get(
             message: "You Have Already Attended This Test",
           });
         }
+
+
 
         const questionmodel = test.questionmodel;
 
@@ -706,7 +726,6 @@ router.post('/create-test', VerifyUser, async (req, res) => {
         })
       );
       question_ids = questionIds
-
     }
 
     const customTest = new CustomTest({
@@ -720,14 +739,36 @@ router.post('/create-test', VerifyUser, async (req, res) => {
       isOrg: isOrg ? isOrg : { state: false },
     });
 
+    // this is where all the codes for locking the test is
+    // if test is locked -- check for type of lock
+    // if type === 'codes' -- 500 codes will be generated for now an stored
+    // if type === 'code' -- single code will be generated 
     let lockedTestCode
+    let lockedTestCodes = [];
     if (isLocked.state) {
+
+      // for single code
       lockedTestCode = generateVerificationKey(6)
       let lockedObject = {
         ...isLocked,
         code: lockedTestCode
       }
       customTest.isLocked = lockedObject
+
+      // for multiple codes
+      if (isLocked.type === 'codes') {
+        for (let i = 0; i < 5; i++) {
+          lockedTestCodes.push(generateVerificationKey(6));
+        }
+        let lockedObjectWithMultipleCodes = {
+          ...lockedObject,
+          codes: lockedTestCodes
+        };
+        customTest.isLocked = lockedObjectWithMultipleCodes
+      }
+
+
+
     }
 
     await customTest.save();
@@ -739,7 +780,9 @@ router.post('/create-test', VerifyUser, async (req, res) => {
     return res.status(200).json({
       message: type + " created successfully",
       url: `${process.env.FRONTEND}/tests/${type}/${testid}?by=${username.toLowerCase().replace(/\s+/g, '-')}`,
-      code: lockedTestCode
+      code: lockedTestCode,
+      codes: lockedTestCodes
+
     });
   } catch (error) {
     console.error(error);
@@ -748,6 +791,42 @@ router.post('/create-test', VerifyUser, async (req, res) => {
     });
   }
 })
+
+// for creating all types of test from the backend
+router.post('/generate-test-code', VerifyUser, async (req, res) => {
+  try {
+    const { number, testuuid } = req.body;
+    const existingCustomTest = await CustomTest.findById(testuuid);
+    if (!existingCustomTest) {
+      return res.status(400).json({ message: "Test Series with the id doesn't exist." });
+    }
+
+    let lockedTestCodes = [];
+    const generateUniqueCode = () => {
+      let code;
+      do {
+        code = generateVerificationKey(6);
+      } while (existingCustomTest.isLocked.codes.includes(code) || lockedTestCodes.includes(code));
+      return code;
+    };
+
+    for (let i = 0; i < number; i++) {
+      lockedTestCodes.push(generateUniqueCode());
+    }
+    existingCustomTest.isLocked.codes = existingCustomTest.isLocked.codes.concat(lockedTestCodes);
+    await existingCustomTest.save();
+    return res.status(200).json({
+      message: "Codes created successfully",
+      codes: lockedTestCodes
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: 'Internal Server Error',
+    });
+  }
+});
+
 
 // for result page --- 
 router.get("/get-custom-tests", async (req, res) => {

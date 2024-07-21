@@ -189,7 +189,7 @@ router.get("/get-anal", VerifyUser, async (req, res) => {
 
     let testsCreated = await CustomTest.find({
       createdBy: userId
-    }).select('_id name testid type date') || []
+    }).select('_id name testid type date isLocked') || []
 
     return res.status(200).json({
       chapterScores: totalChapterScores,

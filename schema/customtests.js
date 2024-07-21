@@ -51,14 +51,24 @@ const customTestSchema = new mongoose.Schema({
             required: function () {
                 return this.isLocked.state; // Will be required if state is true
             },
-            enum: ['org', 'code', 'private'] // org = for orgnanization users only, code = access via code
+            enum: ['org', 'code', 'private', 'codes'] // org = for orgnanization users only, code = access via code, keys = multiple codes
         },
         code: {
             type: String,
             required: function () {
                 return this.isLocked.state; // Will be required if state is true
             },
-        }
+        },
+        // for type -- codes
+        // for multi user codes - each user will have their own code. single time use code
+        codes: {
+            type: [String],
+            default: []
+        },
+        codesUsed: {
+            type: [String],
+            default: []
+        },
     },
     questionmodel: {
         type: String,
