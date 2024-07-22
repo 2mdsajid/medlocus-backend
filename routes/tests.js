@@ -277,7 +277,6 @@ router.get(
         const userid = userFromAuth.id
         if (!userid) return res.status(401).json({ message: "Invalid Authentication" });
 
-
         // for daily tests only -- to get current date from server not from client -- timezones may vary
         const test = await CustomTest.findOne({ testid: testid, type: typeoftest });
         if (!test) {
@@ -877,8 +876,18 @@ router.get("/get-custom-tests/:type", async (req, res) => {
         path: "createdBy",
         select: "name email"
       })
-      .select('image name createdBy usersattended date testid')
+      .select('image name createdBy usersattended date testid questionsIds')
       .exec()
+      
+      tests = tests.map(test => {
+        const { questionsIds, ...rest } = test._doc; // Destructure to remove questionsIds and get the rest of the fields
+        return {
+          ...rest, // Spread the rest of the test fields
+          numberOfQuestions: questionsIds.length // Add numberOfQuestions
+        };
+      });
+      
+
     if (!tests || tests.length == 0) {
       return res.status(404).json({ message: "tests not found" });
     }
@@ -909,7 +918,6 @@ router.get('/get-custom-tests/:type/:testid', async (req, res) => {
     const userFromAuth = jwt.verify(token, secretkey);
     const userid = userFromAuth.id
     if (!userid) return res.status(401).json({ message: "Invalid Authentication" });
-
     const customTest = await CustomTest.findOne({ type, testid })
       .populate({
         path: "createdBy",
@@ -947,7 +955,6 @@ router.get('/get-custom-tests/:type/:testid', async (req, res) => {
       customTest.usersconnected.push(userid)
       const saved = await customTest.save()
     }
-
     const modifiedCustomTests = {
       name: customTest.name,
       testid: customTest.testid,

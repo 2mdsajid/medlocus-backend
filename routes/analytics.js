@@ -137,7 +137,6 @@ router.post('/update-test', VerifyUser, async (req, res) => {
   try {
     const { typeoftest, testid, chapter_scores, combined_score, incorrectAttempt, score_card, questions_ids_and_scores } = req.body;
     const userId = req.userId;
-
     let analytic = await Analytic.findOne({ userid: userId });
     if (!analytic) {
       analytic = new Analytic({ userid: userId, chapterscores: [{}] });
